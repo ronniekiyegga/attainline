@@ -52,8 +52,9 @@ rows. The browser never sends that combination: submitting a search
 drops the cursor.
 
 The current B-tree index supports organisation and surname ordering.
-It does not make arbitrary substring matching inexpensive.
-No search-latency or scale claim has been established.
+It does not make arbitrary substring matching inexpensive. Only the local small-
+fixture plan has been measured; no larger-scale search claim is established.
+See [Performance and complexity evidence](../performance.md).
 
 Results are not a snapshot. Concurrent changes can affect subsequent
 pages.

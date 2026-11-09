@@ -19,6 +19,7 @@ type ApiRequest<T> = {
   sessionToken?: string;
   schema: z.ZodType<T>;
   expectedStatuses?: number[];
+  timeoutMs?: number;
 };
 
 type FailureReason =
@@ -90,6 +91,7 @@ export async function requestApi<T>({
   sessionToken,
   schema,
   expectedStatuses = [],
+  timeoutMs = REQUEST_TIMEOUT_MS,
 }: ApiRequest<T>): Promise<ApiResult<T>> {
   await connection();
 
@@ -119,7 +121,7 @@ export async function requestApi<T>({
       cache: "no-store",
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     logFailure({ requestId, ...describeFetchError(error) });

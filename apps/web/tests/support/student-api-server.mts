@@ -30,6 +30,7 @@ const scenarios = [
   "assessments-unavailable",
   "analytics-unavailable",
   "teacher-dashboard",
+  "readiness-slow",
 ] as const;
 type Scenario = (typeof scenarios)[number];
 
@@ -405,6 +406,14 @@ createServer((request, response) => {
 
   if (request.method === "GET" && first === "__health") {
     sendJson(response, 200, { status: "ok" });
+  } else if (request.method === "GET" && first === "ready") {
+    if (scenario === "readiness-slow") {
+      sendJson(response, 200, { status: "ready" }, 5_000);
+      return;
+    }
+
+    const ready = scenario !== "unavailable";
+    sendJson(response, ready ? 200 : 503, { status: ready ? "ready" : "unavailable" });
   } else if (request.method === "PUT" && first === "__scenario" && isScenario(second)) {
     scenario = second;
     listDelay = Number(url.searchParams.get("listDelay") ?? 0);

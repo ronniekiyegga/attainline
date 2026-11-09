@@ -1,5 +1,44 @@
 # Analytics and rankings
 
+## Problem
+
+Dashboards, profiles and rankings need consistent assessment indicators without
+shipping a whole cohort to the browser or duplicating access rules.
+
+## Constraints
+
+Every read must remain inside the active organisation and assigned year groups.
+The demonstration has a school-sized synthetic cohort, nine assessment measures
+and paginated responses. It does not have production traffic or scale evidence.
+
+## Alternatives
+
+- Browser aggregation was rejected because it would expose an oversized cohort
+  response and duplicate trusted calculations in an untrusted client.
+- PostgreSQL window functions would reduce API materialisation but add a more
+  specialised query before the measured workload requires it.
+- Maintained aggregates would make reads cheap while adding migrations,
+  invalidation and rebuild behaviour.
+- Separate endpoints for every card and chart would create request waterfalls
+  and repeat the same scoped cohort read.
+
+## Complexity
+
+For `N` visible students, `A` returned assessment rows, at most `M = 9`
+measures and `R` ranked students, the current ranking path is
+`O(A + NM + R log R)` time and `O(NM + R)` auxiliary space. Pagination bounds
+the response to `K` rows but occurs after global rank is established. Overview
+aggregation is `O(A + NM + R log R)`: it visits the assessment rows, calculates
+per-student indicators and sorts the ranked subset used for its preview.
+
+## Evidence
+
+Local PostgreSQL plans, scaled in-process ranking measurements and production-
+mode browser timings are recorded in [Performance and complexity evidence](../performance.md).
+At 6,500 fully assessed synthetic students, the isolated ranking calculation
+measured 5.735 ms median and 7.503 ms p95 over 30 runs. This excludes database
+and HTTP time and is not a production-scale claim.
+
 ## Decision
 
 Dashboard, analytics and ranking reads use one analytics feature in the API.
@@ -25,16 +64,7 @@ visible year groups. Headteachers receive the original leadership-intelligence
 composition at whole-school scope. Both surfaces consume the same overview
 contract; the view does not reinterpret access policy.
 
-## Alternatives considered
-
-- Computing rankings in the browser was rejected because it would expose an
-  oversized cohort response and duplicate policy in an untrusted client.
-- Separate endpoints for every card and chart were rejected because they would
-  create request waterfalls and repeat the same scoped cohort query.
-- Persisted aggregate tables were not introduced because the current synthetic
-  dataset does not justify their migration and invalidation complexity.
-
-## Consequences
+## Trade-off
 
 Pagination limits the ranking payload, not the work needed to establish a
 global rank. The service therefore inspects the selected visible cohort before
