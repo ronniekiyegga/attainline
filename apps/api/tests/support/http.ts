@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import type { TestContext } from "node:test";
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
+import type { Actor } from "../../src/features/auth/auth.repository.js";
 import type { Logger } from "../../src/logger.js";
 
 export async function listen(context: TestContext, app: Express) {
@@ -38,4 +40,22 @@ export function recordingLogger() {
   };
 
   return { logger, entries };
+}
+
+export function signedInAs(
+  access: Pick<Actor, "organisationId"> & Partial<Actor>,
+): RequestHandler {
+  const actor: Actor = {
+    sessionId: randomUUID(),
+    userId: randomUUID(),
+    membershipId: randomUUID(),
+    role: "HEADTEACHER",
+    yearGroups: null,
+    ...access,
+  };
+
+  return (_request, response, next) => {
+    response.locals.actor = actor;
+    next();
+  };
 }

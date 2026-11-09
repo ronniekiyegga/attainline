@@ -1,17 +1,18 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { AccountPanel, AccountPanelSkeleton } from "@/features/auth/account-panel";
 import { DashboardShell } from "@/features/shell/dashboard-shell";
-
-const demoIdentity = {
-  name: "Demo teacher",
-  description: "Synthetic demo · not signed in",
-  initials: "DT",
-};
 
 export default function DashboardLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <DashboardShell identity={demoIdentity} schoolName="Demo school">
+    <DashboardShell
+      account={
+        <Suspense fallback={<AccountPanelSkeleton />}>
+          <AccountPanel />
+        </Suspense>
+      }
+    >
       {children}
     </DashboardShell>
   );

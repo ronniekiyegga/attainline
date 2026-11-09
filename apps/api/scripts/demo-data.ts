@@ -77,3 +77,42 @@ export function demoEnrolments(
       : [];
   });
 }
+
+type DemoStaffMembership = {
+  organisationId: string;
+  role: "HEADTEACHER" | "HEAD_OF_YEAR" | "TEACHER";
+  yearGroups: number[];
+};
+
+export type DemoStaff = {
+  email: string;
+  displayName: string;
+  memberships: DemoStaffMembership[];
+};
+
+const [academy, college] = demoOrganisations;
+
+export const demoStaff: DemoStaff[] = [
+  {
+    email: "morgan.vale@example.test",
+    displayName: "Morgan Vale",
+    memberships: [
+      { organisationId: academy.id, role: "HEADTEACHER", yearGroups: [] },
+      { organisationId: college.id, role: "HEADTEACHER", yearGroups: [] },
+    ],
+  },
+  {
+    email: "rowan.thistle@example.test",
+    displayName: "Rowan Thistle",
+    memberships: [
+      { organisationId: academy.id, role: "HEAD_OF_YEAR", yearGroups: [9] },
+    ],
+  },
+  {
+    email: "sasha.wren@example.test",
+    displayName: "Sasha Wren",
+    memberships: [
+      { organisationId: academy.id, role: "TEACHER", yearGroups: [7, 8] },
+    ],
+  },
+];

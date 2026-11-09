@@ -123,3 +123,44 @@ test.describe("student directory presentation", () => {
       .toBe(false);
   });
 });
+
+test.describe("sign-in presentation", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("keeps the reference sign-in measurements at desktop and phone widths", async ({
+    page,
+  }) => {
+    for (const [viewport, cardHeight, panelVisible] of [
+      [{ width: 1440, height: 900 }, 135, true],
+      [{ width: 390, height: 844 }, 151, false],
+    ] as const) {
+      await page.setViewportSize(viewport);
+      await page.goto("/sign-in");
+      await page.evaluate(() => document.fonts.ready);
+
+      const heading = page.getByRole("heading", { name: "Welcome back!" });
+      expect(await style(heading, "font-size")).toBe("24px");
+      expect(await style(heading, "font-weight")).toBe("700");
+      expect(await style(heading, "color")).toBe("rgb(31, 41, 55)");
+
+      const selected = page.locator("label").filter({ hasText: "Senior Leader" });
+      const unselected = page.locator("label").filter({ hasText: "Classroom educator" });
+      expect(await style(selected, "border-top-color")).toBe("rgb(124, 58, 237)");
+      expect(await style(unselected, "border-top-color")).toBe("rgb(229, 231, 235)");
+      expect(await style(unselected, "border-radius")).toBe("12px");
+      expect(Math.round(await height(unselected))).toBe(cardHeight);
+
+      expect(await height(page.getByLabel("Work email"))).toBe(40);
+      expect(await height(page.getByLabel("Password"))).toBe(42);
+
+      const submit = page.getByRole("button", { name: "Sign In" });
+      expect(await height(submit)).toBe(48);
+      expect(await style(submit, "background-image")).toBe(
+        "linear-gradient(to right, rgb(30, 64, 175) 0%, rgb(59, 130, 246) 50%, rgb(76, 29, 149) 100%)",
+      );
+
+      expect(await page.locator("div.bg-linear-to-br.from-slate-100").isVisible()).toBe(panelVisible);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+    }
+  });
+});

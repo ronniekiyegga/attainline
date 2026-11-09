@@ -9,7 +9,7 @@ import {
   MAX_SURNAME_LENGTH,
   MIN_ACADEMIC_YEAR_START,
 } from "../src/features/students/student.limits.js";
-import { createStudentRouter } from "../src/features/students/student.routes.js";
+import { studentRouter } from "./support/student-router.js";
 import {
   academicYearsSchema,
   studentDetailsSchema,
@@ -22,7 +22,7 @@ import {
   MAX_ACADEMIC_YEAR_START as WEB_MAX_ACADEMIC_YEAR_START,
   MIN_ACADEMIC_YEAR_START as WEB_MIN_ACADEMIC_YEAR_START,
 } from "../../web/src/features/students/academic-year.js";
-import { listen, recordingLogger } from "./support/http.js";
+import { listen, recordingLogger, signedInAs } from "./support/http.js";
 import { requireLocalTestDatabase } from "./support/test-database.js";
 
 requireLocalTestDatabase();
@@ -102,12 +102,16 @@ async function removeOrganisations(organisationIds: string[]) {
   });
 }
 
-async function startRouter(context: TestContext, organisationId: string) {
+async function startRouter(
+  context: TestContext,
+  organisationId: string,
+  yearGroups: number[] | null = null,
+) {
   const app = express();
+  app.use(signedInAs({ organisationId, yearGroups }));
   app.use(
     "/students",
-    createStudentRouter({
-      organisationId,
+    studentRouter({
       queryStudents: listStudents,
       queryStudent: findStudent,
       queryAcademicYearStarts: listAcademicYearStarts,
@@ -130,10 +134,10 @@ test("keyset pagination survives inserts and cursor deletion", async (context) =
   const cursorCodec = createStudentCursorCodec(randomBytes(32));
   const { logger, entries } = recordingLogger();
   const app = express();
+  app.use(signedInAs({ organisationId: organisationA }));
   app.use(
     "/students",
-    createStudentRouter({
-      organisationId: organisationA,
+    studentRouter({
       queryStudents: listStudents,
       queryStudent: findStudent,
       queryAcademicYearStarts: listAcademicYearStarts,

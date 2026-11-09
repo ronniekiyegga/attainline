@@ -5,6 +5,7 @@ import {
   demoOrganisations,
   demoPlacement,
   demoReference,
+  demoStaff,
   demoStudents,
 } from "../scripts/demo-data.js";
 
@@ -53,4 +54,23 @@ test("demo data includes missing classes and repeated surnames", () => {
 
 test("rejects references outside the demo format", () => {
   assert.throws(() => demoPlacement("REAL-123", 2026));
+});
+
+test("demo staff use reserved addresses and valid memberships", () => {
+  const organisationIds = new Set(demoOrganisations.map(({ id }) => id));
+  const emails = demoStaff.map(({ email }) => email);
+
+  assert.equal(new Set(emails).size, emails.length);
+
+  for (const staff of demoStaff) {
+    assert.equal(staff.email, staff.email.trim().toLowerCase());
+    assert.match(staff.email, /^[a-z.]+@example\.test$/);
+    assert.ok(staff.memberships.length > 0);
+
+    for (const membership of staff.memberships) {
+      assert.ok(organisationIds.has(membership.organisationId));
+      assert.ok(membership.yearGroups.every((yearGroup) => yearGroup > 0));
+      assert.equal(membership.role === "HEADTEACHER", membership.yearGroups.length === 0);
+    }
+  }
 });

@@ -1,7 +1,7 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
-import { connection } from "next/server";
-import { z } from "zod";
+import { redirect } from "next/navigation";
+import { readSessionToken } from "@/features/auth/session";
+import { requestApi } from "@/server/attainline-api";
 import {
   academicYearsSchema,
   studentPageSchema,
@@ -10,13 +10,6 @@ import {
 import type { StudentSort } from "./student-sort";
 
 const PAGE_SIZE = "25";
-
-const REQUEST_TIMEOUT_MS = 25_000;
-
-type ApiResult<T> =
-  | { status: "success"; data: T }
-  | { status: "expected-error"; httpStatus: number }
-  | { status: "unavailable" };
 
 export type AcademicYearsResult =
   | { status: "success"; data: number[] }
@@ -27,111 +20,16 @@ export type StudentPageResult =
   | { status: "invalid-cursor" }
   | { status: "unavailable" };
 
-type FailureReason =
-  | "not-configured"
-  | "timeout"
-  | "network"
-  | "http-status"
-  | "invalid-response";
-
-const fetchErrorSchema = z.object({
-  name: z.string(),
-  cause: z.object({ code: z.string() }).optional(),
-});
-
-function logFailure(fields: {
-  requestId: string;
-  reason: FailureReason;
-  status?: number;
-  errorCode?: string;
-}) {
-  console.error(JSON.stringify({
-    level: "error",
-    event: "student_api.request_failed",
-    ...fields,
-  }));
-}
-
-function describeFetchError(error: unknown) {
-  const parsed = fetchErrorSchema.safeParse(error);
-
-  return {
-    reason: parsed.data?.name === "TimeoutError" ? "timeout" : "network",
-    errorCode: parsed.data?.cause?.code,
-  } as const;
-}
-
-async function requestStudentApi<T>(
-  path: string,
-  parameters: Record<string, string | undefined>,
-  schema: z.ZodType<T>,
-  expectedErrors: number[] = [],
-): Promise<ApiResult<T>> {
-  await connection();
-
-  const apiUrl = process.env.ATTAINLINE_API_URL;
-  const requestId = randomUUID();
-
-  if (!apiUrl || !URL.canParse(apiUrl)) {
-    logFailure({ requestId, reason: "not-configured" });
-    return { status: "unavailable" };
-  }
-
-  const baseUrl = new URL(apiUrl);
-
-  if (!baseUrl.pathname.endsWith("/")) {
-    baseUrl.pathname += "/";
-  }
-
-  baseUrl.search = "";
-  baseUrl.hash = "";
-
-  const url = new URL(path, baseUrl);
-
-  for (const [name, value] of Object.entries(parameters)) {
-    if (value) {
-      url.searchParams.set(name, value);
-    }
-  }
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      cache: "no-store",
-      headers: { "X-Request-Id": requestId },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (error) {
-    logFailure({ requestId, ...describeFetchError(error) });
-    return { status: "unavailable" };
-  }
-
-  if (expectedErrors.includes(response.status)) {
-    return { status: "expected-error", httpStatus: response.status };
-  }
-
-  if (!response.ok) {
-    logFailure({ requestId, reason: "http-status", status: response.status });
-    return { status: "unavailable" };
-  }
-
-  const body = schema.safeParse(await response.json().catch(() => undefined));
-
-  if (!body.success) {
-    logFailure({ requestId, reason: "invalid-response" });
-    return { status: "unavailable" };
-  }
-
-  return { status: "success", data: body.data };
-}
-
 export async function getAcademicYears(): Promise<AcademicYearsResult> {
-  const result = await requestStudentApi(
-    "students/academic-years",
-    {},
-    academicYearsSchema,
-  );
+  const result = await requestApi({
+    path: "students/academic-years",
+    sessionToken: await readSessionToken(),
+    schema: academicYearsSchema,
+  });
+
+  if (result.status === "unauthenticated") {
+    redirect("/sign-in");
+  }
 
   return result.status === "success"
     ? { status: "success", data: result.data.academicYearStarts }
@@ -151,18 +49,27 @@ export async function getStudents({
   cursor,
   search,
 }: StudentPageQuery): Promise<StudentPageResult> {
-  const result = await requestStudentApi(
-    "students",
-    {
+  const result = await requestApi({
+    path: "students",
+    query: {
       academicYearStart: String(academicYearStart),
       sort,
       limit: PAGE_SIZE,
       q: search,
       cursor,
     },
-    studentPageSchema,
-    cursor ? [400] : [],
-  );
+    sessionToken: await readSessionToken(),
+    schema: studentPageSchema,
+    expectedStatuses: cursor ? [400] : [],
+  });
 
-  return result.status === "expected-error" ? { status: "invalid-cursor" } : result;
+  if (result.status === "unauthenticated") {
+    redirect("/sign-in");
+  }
+
+  if (result.status === "rejected") {
+    return { status: "invalid-cursor" };
+  }
+
+  return result.status === "success" ? result : { status: "unavailable" };
 }

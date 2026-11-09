@@ -7,16 +7,17 @@ import {
   MAX_CURSOR_LENGTH,
   type StudentCursor,
 } from "../src/features/students/student.cursor.js";
-import { createStudentRouter } from "../src/features/students/student.routes.js";
-import { listen, recordingLogger } from "./support/http.js";
+import { studentRouter } from "./support/student-router.js";
+import { listen, recordingLogger, signedInAs } from "./support/http.js";
 
 const organisationId = "11111111-1111-4111-8111-111111111111";
 const studentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const academicYearStart = 2026;
+const access = { organisationId, yearGroups: null };
 
 const cursorCodec = createStudentCursorCodec(randomBytes(32));
 
-type RouterDependencies = Parameters<typeof createStudentRouter>[0];
+type RouterDependencies = Parameters<typeof studentRouter>[0];
 type StudentQuery = RouterDependencies["queryStudents"];
 type StudentDetailsQuery = RouterDependencies["queryStudent"];
 type AcademicYearQuery = RouterDependencies["queryAcademicYearStarts"];
@@ -43,10 +44,10 @@ async function startServer(
     response.locals.requestId = "test-request-id";
     next();
   });
+  app.use(signedInAs({ organisationId }));
   app.use(
     "/students",
-    createStudentRouter({
-      organisationId,
+    studentRouter({
       queryStudents,
       queryStudent,
       queryAcademicYearStarts,
@@ -82,7 +83,7 @@ test("uses default pagination, configured organisation and selected year", async
   const { url } = await startServer(context, async (options) => {
     calls++;
     assert.deepEqual(options, {
-      organisationId,
+      access,
       academicYearStart,
       sort: "surname-asc",
       limit: 25,
@@ -120,8 +121,8 @@ test("lists the organisation's academic years", async (context) => {
   const { url } = await startServer(
     context,
     async () => ({ items: [], next: null }),
-    async (requestedOrganisationId) => {
-      organisations.push(requestedOrganisationId);
+    async (requestedAccess) => {
+      organisations.push(requestedAccess.organisationId);
       return [2026, 2025];
     },
   );
@@ -290,7 +291,7 @@ test("passes trimmed search to the organisation-scoped query", async (context) =
   const { url } = await startServer(context, async (options) => {
     calls++;
     assert.deepEqual(options, {
-      organisationId,
+      access,
       academicYearStart,
       sort: "surname-asc",
       limit: 25,
@@ -309,7 +310,7 @@ test("passes trimmed search to the organisation-scoped query", async (context) =
 test("treats a blank search as no search", async (context) => {
   const { url } = await startServer(context, async (options) => {
     assert.deepEqual(options, {
-      organisationId,
+      access,
       academicYearStart,
       sort: "surname-asc",
       limit: 25,
@@ -424,7 +425,7 @@ test("returns one student's placement for the requested year", async (context) =
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), student);
-  assert.deepEqual(queries, [{ organisationId, academicYearStart, studentId }]);
+  assert.deepEqual(queries, [{ access, academicYearStart, studentId }]);
 });
 
 test("reports a student outside the organisation or year as not found", async (context) => {

@@ -1,9 +1,23 @@
-import { createServer, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 const port = Number(process.env.STUDENT_API_PORT);
 
 if (!Number.isInteger(port) || port <= 0) {
   throw new Error("STUDENT_API_PORT is required");
+}
+
+type StandInOrganisation = { id: string; name: string; token: string };
+
+const auth: {
+  email: string;
+  password: string;
+  lockedEmail: string;
+  academy: StandInOrganisation;
+  college: StandInOrganisation;
+} = JSON.parse(process.env.STAND_IN_AUTH ?? "null");
+
+if (!auth) {
+  throw new Error("STAND_IN_AUTH is required");
 }
 
 const scenarios = [
@@ -12,6 +26,7 @@ const scenarios = [
   "no-enrolments",
   "unavailable",
   "list-unavailable",
+  "session-expired",
 ] as const;
 type Scenario = (typeof scenarios)[number];
 
@@ -27,7 +42,17 @@ let received: {
   q: string | null;
   cursor: string | null;
   requestId: string | null;
+  authorization: string | null;
 }[] = [];
+
+let authRequests: {
+  method: string;
+  path: string;
+  authorization: string | null;
+  origin: string | null;
+}[] = [];
+let issuedTokens = 0;
+const revokedTokens = new Set<string>();
 
 const academicYearStarts = [2026, 2025];
 
@@ -122,6 +147,100 @@ function studentsResponse(response: ServerResponse, url: URL) {
   );
 }
 
+function readBody(request: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve) => {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        resolve(undefined);
+      }
+    });
+  });
+}
+
+function sessionOrganisation(request: IncomingMessage): StandInOrganisation | undefined {
+  const token = request.headers.authorization?.replace(/^Bearer /, "");
+
+  if (!token || revokedTokens.has(token) || scenario === "session-expired") {
+    return undefined;
+  }
+
+  if (token === auth.college.token) {
+    return auth.college;
+  }
+
+  return token === auth.academy.token || token.startsWith("issued") ? auth.academy : undefined;
+}
+
+function issueToken(organisation: StandInOrganisation) {
+  if (organisation === auth.college) {
+    return organisation.token;
+  }
+
+  issuedTokens += 1;
+  return `issued${String(issuedTokens).padStart(37, "0")}`;
+}
+
+async function authResponse(request: IncomingMessage, response: ServerResponse, path: string) {
+  authRequests.push({
+    method: request.method ?? "",
+    path,
+    authorization: request.headers.authorization ?? null,
+    origin: request.headers.origin ?? null,
+  });
+
+  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+
+  if (request.method === "POST" && path === "/auth/sessions") {
+    const body = await readBody(request) as { email?: string; password?: string } | undefined;
+
+    if (body?.email === auth.lockedEmail) {
+      sendJson(response, 429, { error: "Too many failed sign-in attempts" });
+    } else if (body?.email === auth.email && body.password === auth.password) {
+      sendJson(response, 201, { token: issueToken(auth.academy), expiresAt });
+    } else {
+      sendJson(response, 401, { error: "Invalid email or password" });
+    }
+    return;
+  }
+
+  const organisation = sessionOrganisation(request);
+
+  if (!organisation) {
+    sendJson(response, 401, { error: "Authentication required" });
+    return;
+  }
+
+  if (request.method === "GET" && path === "/auth/session") {
+    sendJson(response, 200, {
+      user: { email: auth.email, displayName: "Morgan Vale" },
+      organisation: { id: organisation.id, name: organisation.name },
+      role: "HEADTEACHER",
+      yearGroups: null,
+      organisations: [auth.academy, auth.college].map(({ id, name }) => ({ id, name })),
+    });
+  } else if (request.method === "DELETE" && path === "/auth/session") {
+    revokedTokens.add(request.headers.authorization?.replace(/^Bearer /, "") ?? "");
+    response.writeHead(204).end();
+  } else if (request.method === "PUT" && path === "/auth/session/organisation") {
+    const body = await readBody(request) as { organisationId?: string } | undefined;
+    const target = [auth.academy, auth.college].find(({ id }) => id === body?.organisationId);
+
+    if (target) {
+      sendJson(response, 200, { token: issueToken(target), expiresAt });
+    } else {
+      sendJson(response, 403, { error: "Not a member of this organisation" });
+    }
+  } else {
+    sendJson(response, 404, { error: "Not found" });
+  }
+}
+
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
   const [, first, second] = url.pathname.split("/");
@@ -133,9 +252,17 @@ createServer((request, response) => {
     listDelay = Number(url.searchParams.get("listDelay") ?? 0);
     holdYearsForList = url.searchParams.has("holdYearsForList");
     received = [];
+    authRequests = [];
+    revokedTokens.clear();
     response.writeHead(204).end();
   } else if (request.method === "GET" && first === "__requests") {
     sendJson(response, 200, received);
+  } else if (request.method === "GET" && first === "__auth-requests") {
+    sendJson(response, 200, authRequests);
+  } else if (first === "auth") {
+    void authResponse(request, response, url.pathname);
+  } else if (request.method === "GET" && first === "students" && !sessionOrganisation(request)) {
+    sendJson(response, 401, { error: "Authentication required" });
   } else if (request.method === "GET" && first === "students") {
     received.push({
       path: url.pathname,
@@ -145,6 +272,7 @@ createServer((request, response) => {
       q: url.searchParams.get("q"),
       cursor: url.searchParams.get("cursor"),
       requestId: request.headers["x-request-id"]?.toString() ?? null,
+      authorization: request.headers.authorization ?? null,
     });
     if (second === "academic-years") {
       academicYearsResponse(response);

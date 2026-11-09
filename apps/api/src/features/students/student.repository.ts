@@ -1,6 +1,9 @@
 import { database } from "../../database.js";
 import type { Prisma } from "../../generated/prisma/client.js";
+import type { Actor } from "../auth/auth.repository.js";
 import type { StudentSort } from "./student.sort.js";
+
+export type StudentAccess = Pick<Actor, "organisationId" | "yearGroups">;
 
 type StudentKey = {
   surname: string;
@@ -8,7 +11,7 @@ type StudentKey = {
 };
 
 type ListStudentsOptions = {
-  organisationId: string;
+  access: StudentAccess;
   academicYearStart: number;
   sort: StudentSort;
   limit: number;
@@ -17,7 +20,7 @@ type ListStudentsOptions = {
 };
 
 type FindStudentOptions = {
-  organisationId: string;
+  access: StudentAccess;
   academicYearStart: number;
   studentId: string;
 };
@@ -58,14 +61,24 @@ function isAfter(
   };
 }
 
-function placementSelect(academicYearStart: number) {
+function visibleEnrolment(
+  { yearGroups }: StudentAccess,
+  academicYearStart?: number,
+): Prisma.StudentEnrolmentWhereInput {
+  return {
+    ...(academicYearStart !== undefined && { academicYearStart }),
+    ...(yearGroups && { yearGroup: { in: yearGroups } }),
+  };
+}
+
+function placementSelect(access: StudentAccess, academicYearStart: number) {
   return {
     id: true,
     institutionStudentRef: true,
     firstName: true,
     surname: true,
     enrolments: {
-      where: { academicYearStart },
+      where: visibleEnrolment(access, academicYearStart),
       select: { yearGroup: true, classGroup: true },
       take: 1,
     },
@@ -85,11 +98,11 @@ function withPlacement({ enrolments: [placement], ...student }: StudentWithEnrol
 }
 
 export async function listAcademicYearStarts(
-  organisationId: string,
+  access: StudentAccess,
 ): Promise<number[]> {
   const years = await database.studentEnrolment.groupBy({
     by: ["academicYearStart"],
-    where: { organisationId },
+    where: { organisationId: access.organisationId, ...visibleEnrolment(access) },
     orderBy: { academicYearStart: "desc" },
   });
 
@@ -97,7 +110,7 @@ export async function listAcademicYearStarts(
 }
 
 export async function listStudents({
-  organisationId,
+  access,
   academicYearStart,
   sort,
   limit,
@@ -106,7 +119,7 @@ export async function listStudents({
 }: ListStudentsOptions) {
   const direction: Prisma.SortOrder = sort === "surname-desc" ? "desc" : "asc";
   const conditions: Prisma.StudentWhereInput[] = [
-    { enrolments: { some: { academicYearStart } } },
+    { enrolments: { some: visibleEnrolment(access, academicYearStart) } },
   ];
 
   if (search) {
@@ -119,8 +132,8 @@ export async function listStudents({
 
   const students = await database.$transaction(
     (transaction) => transaction.student.findMany({
-      where: { organisationId, AND: conditions },
-      select: placementSelect(academicYearStart),
+      where: { organisationId: access.organisationId, AND: conditions },
+      select: placementSelect(access, academicYearStart),
       orderBy: [{ surname: direction }, { id: direction }],
       take: limit + 1,
     }),
@@ -138,7 +151,7 @@ export async function listStudents({
 }
 
 export async function findStudent({
-  organisationId,
+  access,
   academicYearStart,
   studentId,
 }: FindStudentOptions) {
@@ -146,10 +159,10 @@ export async function findStudent({
     (transaction) => transaction.student.findFirst({
       where: {
         id: studentId,
-        organisationId,
-        enrolments: { some: { academicYearStart } },
+        organisationId: access.organisationId,
+        enrolments: { some: visibleEnrolment(access, academicYearStart) },
       },
-      select: placementSelect(academicYearStart),
+      select: placementSelect(access, academicYearStart),
     }),
     { isolationLevel: "RepeatableRead" },
   );

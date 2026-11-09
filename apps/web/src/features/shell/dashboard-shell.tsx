@@ -1,23 +1,21 @@
 import type { ReactNode } from "react";
 import { HeaderContent } from "./header-content";
-import { Navigation, type DemoIdentity } from "./navigation";
+import { Navigation } from "./navigation";
 import { SidebarInset } from "./sidebar/sidebar";
 import { SidebarProvider } from "./sidebar/sidebar-context";
 
 type DashboardShellProps = {
   children: ReactNode;
-  identity: DemoIdentity;
-  schoolName: string;
+  account: ReactNode;
 };
 
 export function DashboardShell({
   children,
-  identity,
-  schoolName,
+  account,
 }: DashboardShellProps) {
   return (
     <SidebarProvider defaultOpen={false}>
-      <Navigation identity={identity} schoolName={schoolName} />
+      <Navigation account={account} />
       <SidebarInset
         id="main-content"
         className="min-w-0 overflow-x-hidden px-1 lg:pr-4"

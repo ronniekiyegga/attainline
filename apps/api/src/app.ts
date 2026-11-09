@@ -1,23 +1,33 @@
-import express, { type ErrorRequestHandler, type Router } from "express";
+import express, {
+  type ErrorRequestHandler,
+  type RequestHandler,
+  type Router,
+} from "express";
+import { rejectBrowserMutations } from "./browser-mutations.js";
 import { describeDatabaseError } from "./database-errors.js";
 import type { Logger } from "./logger.js";
 import { requestId } from "./request-id.js";
 
 type AppDependencies = {
   checkDatabase: () => Promise<void>;
+  authRouter: Router;
   studentRouter: Router;
+  requireSession: RequestHandler;
   logger: Logger;
 };
 
 export function createApp({
   checkDatabase,
+  authRouter,
   studentRouter,
+  requireSession,
   logger,
 }: AppDependencies) {
   const app = express();
 
   app.disable("x-powered-by");
   app.use(requestId);
+  app.use(rejectBrowserMutations);
 
   app.get("/health", (_request, response) => {
     response.json({ status: "ok" });
@@ -38,7 +48,8 @@ export function createApp({
     }
   });
 
-  app.use("/students", studentRouter);
+  app.use("/auth", authRouter);
+  app.use("/students", requireSession, studentRouter);
 
   app.use((_request, response) => {
     response.status(404).json({ error: "Not found" });

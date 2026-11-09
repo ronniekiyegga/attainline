@@ -34,7 +34,7 @@ test.describe("desktop sidebar", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     await expect.poll(() => sidebarWidth(page)).toBe(256);
     await expect(page.getByText("Active school")).toBeVisible();
-    await expect(page.getByText("Demo teacher")).toBeVisible();
+    await expect(page.getByText("Morgan Vale").filter({ visible: true })).toBeVisible();
   });
 
   test("toggles with Enter, Space and the keyboard shortcut", async ({
@@ -109,7 +109,7 @@ test.describe("mobile navigation", () => {
     await expect(
       dialog.getByRole("button", { name: "Close navigation" }),
     ).toBeFocused();
-    await expect(dialog.getByText("Demo teacher")).toBeVisible();
+    await expect(dialog.getByText("Morgan Vale").filter({ visible: true })).toBeVisible();
 
     await page.keyboard.press("Escape");
 
@@ -134,10 +134,16 @@ test.describe("mobile navigation", () => {
       .poll(async () => (await close.boundingBox())?.width)
       .toBeGreaterThan(1);
 
-    await page.keyboard.press("Tab");
-    await expect(link).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(close).toBeFocused();
+    for (const control of [
+      dialog.getByLabel("School"),
+      dialog.getByRole("button", { name: "Switch", exact: true }),
+      dialog.getByRole("button", { name: "Sign out" }),
+      link,
+      close,
+    ]) {
+      await page.keyboard.press("Tab");
+      await expect(control).toBeFocused();
+    }
 
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
