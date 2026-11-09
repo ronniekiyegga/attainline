@@ -1,9 +1,14 @@
 import { Router, type Response } from "express";
+import { z } from "zod";
 import { describeDatabaseError } from "../../database-errors.js";
 import type { Logger } from "../../logger.js";
 import { searchHash, type StudentCursorCodec } from "./student.cursor.js";
-import { createStudentPaginationSchema } from "./student.pagination.js";
+import {
+  createStudentPaginationSchema,
+  studentDetailsQuerySchema,
+} from "./student.pagination.js";
 import type {
+  findStudent,
   listAcademicYearStarts,
   listStudents,
 } from "./student.repository.js";
@@ -11,10 +16,13 @@ import type {
 type StudentRouterDependencies = {
   organisationId: string;
   queryStudents: typeof listStudents;
+  queryStudent: typeof findStudent;
   queryAcademicYearStarts: typeof listAcademicYearStarts;
   cursorCodec: StudentCursorCodec;
   logger: Logger;
 };
+
+const studentIdSchema = z.uuid();
 
 function rejectPagination(response: Response) {
   response.status(400).json({ error: "Invalid pagination" });
@@ -23,6 +31,7 @@ function rejectPagination(response: Response) {
 export function createStudentRouter({
   organisationId,
   queryStudents,
+  queryStudent,
   queryAcademicYearStarts,
   cursorCodec,
   logger,
@@ -60,6 +69,35 @@ export function createStudentRouter({
     }
   });
 
+  router.get("/:studentId", async (request, response) => {
+    response.set("Cache-Control", "no-store");
+
+    const studentId = studentIdSchema.safeParse(request.params.studentId);
+    const query = studentDetailsQuerySchema.safeParse(request.query);
+
+    if (!studentId.success || !query.success) {
+      response.status(400).json({ error: "Invalid student request" });
+      return;
+    }
+
+    try {
+      const student = await queryStudent({
+        organisationId,
+        academicYearStart: query.data.academicYearStart,
+        studentId: studentId.data,
+      });
+
+      if (!student) {
+        response.status(404).json({ error: "Student not found" });
+        return;
+      }
+
+      response.json(student);
+    } catch (error) {
+      respondUnavailable(response, "students.details_failed", error);
+    }
+  });
+
   router.get("/", async (request, response) => {
     response.set("Cache-Control", "no-store");
 
@@ -70,7 +108,7 @@ export function createStudentRouter({
       return;
     }
 
-    const { academicYearStart, limit, cursor, q } = pagination.data;
+    const { academicYearStart, sort, limit, cursor, q } = pagination.data;
     const search = q || undefined;
     const expectedSearchHash = searchHash(search);
 
@@ -78,6 +116,7 @@ export function createStudentRouter({
       cursor &&
       (cursor.organisationId !== organisationId ||
         cursor.academicYearStart !== academicYearStart ||
+        cursor.sort !== sort ||
         cursor.searchHash !== expectedSearchHash)
     ) {
       rejectPagination(response);
@@ -88,6 +127,7 @@ export function createStudentRouter({
       const page = await queryStudents({
         organisationId,
         academicYearStart,
+        sort,
         limit,
         after: cursor && { surname: cursor.surname, id: cursor.id },
         ...(search && { search }),
@@ -97,6 +137,7 @@ export function createStudentRouter({
         ? cursorCodec.encode({
             organisationId,
             academicYearStart,
+            sort,
             ...page.next,
             ...(expectedSearchHash && { searchHash: expectedSearchHash }),
           })

@@ -107,7 +107,9 @@ test("restricts deleting an organisation that has students", async () => {
     where: { id: organisationA },
   }));
 
-  assert.equal(failure.sqlState, "23001");
+  assert.equal(failure.errorCode, "P2003");
+  assert.equal(failure.adapterKind, "ForeignKeyConstraintViolation");
+  assert.equal(failure.sqlState, "23503");
 });
 
 test("accepts surnames up to the length limit and rejects longer ones", async () => {

@@ -8,7 +8,11 @@ test("reads codes from a wrapped Prisma error", () => {
     code: "P2010",
     meta: {
       driverAdapterError: {
-        cause: { kind: "postgres", code: "57014", message: "secret" },
+        cause: {
+          kind: "postgres",
+          originalCode: "57014",
+          originalMessage: "secret",
+        },
       },
     },
   });

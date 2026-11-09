@@ -12,9 +12,12 @@ import {
 import { createStudentRouter } from "../src/features/students/student.routes.js";
 import {
   academicYearsSchema,
+  studentDetailsSchema,
   studentPageSchema,
 } from "../../web/src/features/students/student-page.schema.js";
 import { MAX_SEARCH_LENGTH as WEB_MAX_SEARCH_LENGTH } from "../../web/src/features/students/student-search.schema.js";
+import { STUDENT_SORTS as WEB_STUDENT_SORTS } from "../../web/src/features/students/student-sort.js";
+import { STUDENT_SORTS } from "../src/features/students/student.sort.js";
 import {
   MAX_ACADEMIC_YEAR_START as WEB_MAX_ACADEMIC_YEAR_START,
   MIN_ACADEMIC_YEAR_START as WEB_MIN_ACADEMIC_YEAR_START,
@@ -25,7 +28,7 @@ import { requireLocalTestDatabase } from "./support/test-database.js";
 requireLocalTestDatabase();
 
 const { database } = await import("../src/database.js");
-const { listAcademicYearStarts, listStudents } = await import(
+const { findStudent, listAcademicYearStarts, listStudents } = await import(
   "../src/features/students/student.repository.js"
 );
 
@@ -106,6 +109,7 @@ async function startRouter(context: TestContext, organisationId: string) {
     createStudentRouter({
       organisationId,
       queryStudents: listStudents,
+      queryStudent: findStudent,
       queryAcademicYearStarts: listAcademicYearStarts,
       cursorCodec: createStudentCursorCodec(randomBytes(32)),
       logger: recordingLogger().logger,
@@ -131,6 +135,7 @@ test("keyset pagination survives inserts and cursor deletion", async (context) =
     createStudentRouter({
       organisationId: organisationA,
       queryStudents: listStudents,
+      queryStudent: findStudent,
       queryAcademicYearStarts: listAcademicYearStarts,
       cursorCodec,
       logger,
@@ -370,9 +375,10 @@ test("accepts the longest search the web form can submit", async (context) => {
   }
 });
 
-test("the web app accepts the same academic year range as the API", () => {
+test("the web app accepts the same academic year range and sorts as the API", () => {
   assert.equal(WEB_MIN_ACADEMIC_YEAR_START, MIN_ACADEMIC_YEAR_START);
   assert.equal(WEB_MAX_ACADEMIC_YEAR_START, MAX_ACADEMIC_YEAR_START);
+  assert.deepEqual(WEB_STUDENT_SORTS, STUDENT_SORTS);
 });
 
 test("lists one organisation's academic years, newest first", async (context) => {
@@ -533,5 +539,163 @@ test("search and pagination stay within the selected year", async (context) => {
     );
   } finally {
     await removeOrganisations([organisationId]);
+  }
+});
+
+test("sorts by surname in both directions with ID breaking ties across pages", async (context) => {
+  const organisationId = randomUUID();
+  const brimmIds = [randomUUID(), randomUUID(), randomUUID()].sort();
+
+  try {
+    await database.organisation.create({
+      data: { id: organisationId, name: "Synthetic Sort Academy" },
+    });
+
+    const [ardleyId, corvenId] = await createEnrolledStudents([
+      { organisationId, institutionStudentRef: "SORT-001", surname: "Ardley" },
+      { organisationId, institutionStudentRef: "SORT-005", surname: "Corven" },
+    ]);
+    await createEnrolledStudents(brimmIds.map((id, index) => ({
+      id,
+      organisationId,
+      institutionStudentRef: `SORT-BRIMM-${index}`,
+      surname: "Brimm",
+    })));
+    await createEnrolledStudents(
+      [{ organisationId, institutionStudentRef: "SORT-OTHER-YEAR", surname: "Aaronson" }],
+      { academicYearStart: 2025 },
+    );
+
+    const url = await startRouter(context, organisationId);
+
+    async function allPages(sort: string) {
+      const ids: string[] = [];
+      let cursor: string | null = null;
+
+      do {
+        const query = directoryQuery({ sort, limit: "2", ...(cursor ? { cursor } : {}) });
+        const response = await fetch(`${url}?${query}`);
+        assert.equal(response.status, 200);
+
+        const page = studentPageSchema.parse(await response.json());
+        ids.push(...page.items.map((student) => student.id));
+        cursor = page.nextCursor;
+      } while (cursor);
+
+      return ids;
+    }
+
+    const ascending = [ardleyId, ...brimmIds, corvenId];
+
+    assert.deepEqual(await allPages("surname-asc"), ascending);
+    assert.deepEqual(await allPages("surname-desc"), ascending.toReversed());
+  } finally {
+    await removeOrganisations([organisationId]);
+  }
+});
+
+test("combines descending sort with search inside the selected year", async (context) => {
+  const organisationId = randomUUID();
+
+  try {
+    await database.organisation.create({
+      data: { id: organisationId, name: "Synthetic Sort Search Academy" },
+    });
+
+    await createEnrolledStudents([
+      { organisationId, institutionStudentRef: "SS-001", firstName: "Velmira", surname: "Ashcombe" },
+      { organisationId, institutionStudentRef: "SS-002", firstName: "Velmira", surname: "Tolland" },
+      { organisationId, institutionStudentRef: "SS-003", firstName: "Corin", surname: "Mardle" },
+    ]);
+    await createEnrolledStudents(
+      [{ organisationId, institutionStudentRef: "SS-004", firstName: "Velmira", surname: "Zeller" }],
+      { academicYearStart: 2025 },
+    );
+
+    const url = await startRouter(context, organisationId);
+    const first = studentPageSchema.parse(await (await fetch(
+      `${url}?${directoryQuery({ q: "velmira", sort: "surname-desc", limit: "1" })}`,
+    )).json());
+
+    assert.deepEqual(first.items.map((student) => student.surname), ["Tolland"]);
+    assert.ok(first.nextCursor);
+
+    const second = studentPageSchema.parse(await (await fetch(
+      `${url}?${directoryQuery({
+        q: "velmira",
+        sort: "surname-desc",
+        limit: "1",
+        cursor: first.nextCursor,
+      })}`,
+    )).json());
+
+    assert.deepEqual(second.items.map((student) => student.surname), ["Ashcombe"]);
+    assert.equal(second.nextCursor, null);
+
+    const ascendingWithDescendingCursor = directoryQuery({
+      q: "velmira",
+      limit: "1",
+      cursor: first.nextCursor,
+    });
+    assert.equal((await fetch(`${url}?${ascendingWithDescendingCursor}`)).status, 400);
+  } finally {
+    await removeOrganisations([organisationId]);
+  }
+});
+
+test("returns student details only within the organisation and selected year", async (context) => {
+  const organisationId = randomUUID();
+  const otherOrganisationId = randomUUID();
+  const organisationIds = [organisationId, otherOrganisationId];
+
+  try {
+    await database.organisation.createMany({
+      data: [
+        { id: organisationId, name: "Synthetic Detail Academy" },
+        { id: otherOrganisationId, name: "Synthetic Detail College" },
+      ],
+    });
+
+    const [student] = await database.student.createManyAndReturn({
+      data: [{ organisationId, institutionStudentRef: "DETAIL-001", firstName: "Orla", surname: "Ashby" }],
+      select: { id: true, organisationId: true },
+    });
+    await enrol([student], { academicYearStart: 2025, yearGroup: 8, classGroup: "8A" });
+    await enrol([student], { academicYearStart: 2026, yearGroup: 9, classGroup: null });
+
+    const [foreignId] = await createEnrolledStudents([
+      { organisationId: otherOrganisationId, institutionStudentRef: "DETAIL-001", surname: "Ashby" },
+    ]);
+
+    const url = await startRouter(context, organisationId);
+
+    async function details(id: string, year: number) {
+      return fetch(`${url}/${id}?academicYearStart=${year}`);
+    }
+
+    const current = await details(student.id, 2026);
+    assert.equal(current.status, 200);
+    assert.deepEqual(studentDetailsSchema.parse(await current.json()), {
+      id: student.id,
+      institutionStudentRef: "DETAIL-001",
+      firstName: "Orla",
+      surname: "Ashby",
+      yearGroup: 9,
+      classGroup: null,
+    });
+
+    const previous = studentDetailsSchema.parse(await (await details(student.id, 2025)).json());
+    assert.deepEqual([previous.yearGroup, previous.classGroup], [8, "8A"]);
+
+    for (const [id, year] of [
+      [student.id, 2024],
+      [foreignId, 2026],
+      [randomUUID(), 2026],
+    ] as const) {
+      const response = await details(id, year);
+      assert.equal(response.status, 404, `${id} ${year}`);
+    }
+  } finally {
+    await removeOrganisations(organisationIds);
   }
 });

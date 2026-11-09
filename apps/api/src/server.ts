@@ -7,6 +7,7 @@ import {
   parseStudentCursorKey,
 } from "./features/students/student.cursor.js";
 import {
+  findStudent,
   listAcademicYearStarts,
   listStudents,
 } from "./features/students/student.repository.js";
@@ -28,6 +29,7 @@ const app = createApp({
   studentRouter: createStudentRouter({
     organisationId,
     queryStudents: listStudents,
+    queryStudent: findStudent,
     queryAcademicYearStarts: listAcademicYearStarts,
     cursorCodec,
     logger,

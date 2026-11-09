@@ -8,17 +8,20 @@ export const academicYearsSchema = z.object({
   ),
 });
 
+export const studentDetailsSchema = z.object({
+  id: z.uuid(),
+  institutionStudentRef: z.string(),
+  firstName: z.string().nullable(),
+  surname: z.string(),
+  yearGroup: z.number().int().positive(),
+  classGroup: z.string().nullable(),
+});
+
 export const studentPageSchema = z.object({
-  items: z.array(z.object({
-    id: z.uuid(),
-    institutionStudentRef: z.string(),
-    firstName: z.string().nullable(),
-    surname: z.string(),
-    yearGroup: z.number().int().positive(),
-    classGroup: z.string().nullable(),
-  })).max(100),
+  items: z.array(studentDetailsSchema).max(100),
   nextCursor: z.string().min(1).nullable(),
   limit: z.number().int().min(1).max(100),
 });
 
 export type StudentPage = z.infer<typeof studentPageSchema>;
+export type StudentDetails = z.infer<typeof studentDetailsSchema>;

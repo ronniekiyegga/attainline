@@ -5,6 +5,7 @@ import { z } from "zod";
 const adapterCauseSchema = z.object({
   kind: z.string(),
   code: z.string().optional(),
+  originalCode: z.string().optional(),
 });
 
 // Prisma wraps most driver errors under meta.driverAdapterError, but some
@@ -39,6 +40,6 @@ export function describeDatabaseError(error: unknown): DatabaseErrorDetails {
     errorName: parsed.data.name,
     errorCode: parsed.data.code,
     adapterKind: cause?.kind,
-    sqlState: cause?.code,
+    sqlState: cause?.code ?? cause?.originalCode,
   };
 }
