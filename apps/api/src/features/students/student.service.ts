@@ -1,16 +1,9 @@
 import { searchHash, type StudentCursor, type StudentCursorCodec } from "./student.cursor.js";
-import type {
-  findStudent,
-  listAcademicYearStarts,
-  listStudents,
-  StudentAccess,
-} from "./student.repository.js";
+import type { listStudents, StudentAccess } from "./student.repository.js";
 import type { StudentSort } from "./student.sort.js";
 
 type StudentServiceDependencies = {
   queryStudents: typeof listStudents;
-  queryStudent: typeof findStudent;
-  queryAcademicYearStarts: typeof listAcademicYearStarts;
   cursorCodec: StudentCursorCodec;
 };
 
@@ -24,12 +17,7 @@ export type DirectoryQuery = {
 
 export type StudentService = ReturnType<typeof createStudentService>;
 
-export function createStudentService({
-  queryStudents,
-  queryStudent,
-  queryAcademicYearStarts,
-  cursorCodec,
-}: StudentServiceDependencies) {
+export function createStudentService({ queryStudents, cursorCodec }: StudentServiceDependencies) {
   async function listDirectory(
     access: StudentAccess,
     { academicYearStart, sort, limit, cursor, search }: DirectoryQuery,
@@ -68,10 +56,5 @@ export function createStudentService({
     return { status: "listed", items: page.items, nextCursor } as const;
   }
 
-  return {
-    listDirectory,
-    listAcademicYears: (access: StudentAccess) => queryAcademicYearStarts(access),
-    findStudent: (access: StudentAccess, studentId: string, academicYearStart: number) =>
-      queryStudent({ access, studentId, academicYearStart }),
-  };
+  return { listDirectory };
 }

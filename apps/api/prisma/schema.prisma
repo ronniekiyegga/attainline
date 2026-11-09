@@ -30,7 +30,8 @@ model Student {
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
-  enrolments StudentEnrolment[]
+  enrolments        StudentEnrolment[]
+  assessmentResults AssessmentResult[]
 
   @@unique([organisationId, institutionStudentRef])
   @@unique([organisationId, id])
@@ -137,4 +138,39 @@ model LoginThrottle {
   lockedUntil     DateTime? @map("locked_until") @db.Timestamptz(3)
 
   @@map("login_throttles")
+}
+
+enum AssessmentMeasure {
+  CAT4_VERBAL
+  CAT4_QUANTITATIVE
+  CAT4_NON_VERBAL
+  CAT4_SPATIAL
+  CAT4_MEAN
+  NGRT_READING
+  PTE
+  PTM
+  PTS
+
+  @@map("assessment_measure")
+}
+
+model AssessmentResult {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organisationId         String            @map("organisation_id") @db.Uuid
+  studentId              String            @map("student_id") @db.Uuid
+  measure                AssessmentMeasure
+  academicYearStart      Int               @map("academic_year_start")
+  satOn                  DateTime          @map("sat_on") @db.Date
+  rawScore               Int?              @map("raw_score")
+  rawScoreMaximum        Int?              @map("raw_score_maximum")
+  standardAgeScore       Int               @map("standard_age_score")
+  stanine                Int
+  nationalPercentileRank Int?              @map("national_percentile_rank")
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student Student @relation(fields: [organisationId, studentId], references: [organisationId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([studentId, measure, satOn])
+  @@index([organisationId, studentId, measure, satOn])
+  @@map("assessment_results")
 }

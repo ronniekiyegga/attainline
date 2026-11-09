@@ -151,7 +151,7 @@ function DirectoryResult({ result, location, cursor }: DirectoryResultProps) {
         students={items}
         caption={`Students enrolled in ${yearLabel}, ordered by surname ${order}`}
         emptyMessage={emptyMessage}
-        location={location}
+        location={{ ...location, cursor }}
       />
 
       <div className="flex min-h-[3.25rem] flex-wrap items-center justify-between gap-2 py-2">

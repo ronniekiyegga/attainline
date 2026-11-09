@@ -27,6 +27,7 @@ const scenarios = [
   "unavailable",
   "list-unavailable",
   "session-expired",
+  "assessments-unavailable",
 ] as const;
 type Scenario = (typeof scenarios)[number];
 
@@ -147,6 +148,72 @@ function studentsResponse(response: ServerResponse, url: URL) {
   );
 }
 
+const assessments: Record<string, unknown> = {
+  "0a3f5c1e-1111-4111-8111-000000000001": {
+    academicYearStart: 2026,
+    status: { value: "AT_RISK", averageStandardAgeScore: 97.5, basedOn: ["CAT4_MEAN", "NGRT_READING"] },
+    priority: { value: "HIGH", standardAgeScore: 88, basedOn: "CAT4_QUANTITATIVE" },
+    results: [
+      {
+        measure: "CAT4_QUANTITATIVE",
+        satOn: "2026-10-05",
+        rawScore: null,
+        rawScoreMaximum: null,
+        standardAgeScore: 88,
+        stanine: 3,
+        nationalPercentileRank: 21,
+        previous: null,
+      },
+      {
+        measure: "CAT4_MEAN",
+        satOn: "2026-10-05",
+        rawScore: null,
+        rawScoreMaximum: null,
+        standardAgeScore: 103,
+        stanine: 5,
+        nationalPercentileRank: 58,
+        previous: { satOn: "2025-10-06", standardAgeScore: 96, stanine: 4 },
+      },
+      {
+        measure: "NGRT_READING",
+        satOn: "2026-10-07",
+        rawScore: null,
+        rawScoreMaximum: null,
+        standardAgeScore: 92,
+        stanine: 4,
+        nationalPercentileRank: 30,
+        previous: null,
+      },
+    ],
+  },
+};
+
+function enrolledStudent(url: URL, studentId: string) {
+  return studentsByYear[url.searchParams.get("academicYearStart") ?? ""]
+    ?.find(({ id }) => id === studentId);
+}
+
+function studentResponse(response: ServerResponse, url: URL, studentId: string, section?: string) {
+  const student = enrolledStudent(url, studentId);
+
+  if (!student) {
+    sendJson(response, 404, { error: "Student not found" });
+  } else if (!section) {
+    sendJson(response, 200, student);
+  } else if (section !== "assessments") {
+    sendJson(response, 404, { error: "Not found" });
+  } else if (scenario === "assessments-unavailable") {
+    sendJson(response, 503, { error: "Assessments unavailable" });
+  } else {
+    sendJson(response, 200, assessments[studentId] ?? {
+      academicYearStart: Number(url.searchParams.get("academicYearStart")),
+      status: { value: "PENDING", averageStandardAgeScore: null, basedOn: [] },
+      priority: { value: "MEDIUM", standardAgeScore: null, basedOn: null },
+      results: [],
+    });
+  }
+}
+
 function readBody(request: IncomingMessage): Promise<unknown> {
   return new Promise((resolve) => {
     let body = "";
@@ -243,7 +310,7 @@ async function authResponse(request: IncomingMessage, response: ServerResponse, 
 
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
-  const [, first, second] = url.pathname.split("/");
+  const [, first, second, third] = url.pathname.split("/");
 
   if (request.method === "GET" && first === "__health") {
     sendJson(response, 200, { status: "ok" });
@@ -280,7 +347,7 @@ createServer((request, response) => {
       releaseYears?.();
       studentsResponse(response, url);
     } else {
-      sendJson(response, 404, { error: "Not found" });
+      studentResponse(response, url, second, third);
     }
   } else {
     sendJson(response, 404, { error: "Not found" });

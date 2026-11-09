@@ -79,7 +79,7 @@ test.describe("student directory presentation", () => {
   });
 
   test("keeps the reference student details sheet", async ({ page }) => {
-    await page.getByRole("button", { name: "View details for Avery Ashgrove" }).click();
+    await page.getByRole("link", { name: "View profile for Avery Ashgrove" }).click();
     const dialog = page.getByRole("dialog", { name: "Avery Ashgrove" });
     await expect(dialog.getByRole("definition").first()).toHaveText("DEMO-SYN-001");
 
@@ -97,7 +97,7 @@ test.describe("student directory presentation", () => {
       .toBe("rgb(243, 244, 246)");
     expect(await style(dialog.getByText("Student reference"), "color"))
       .toBe("rgb(229, 231, 235)");
-    expect(await style(dialog.getByText("Student details", { exact: true }), "color"))
+    expect(await style(dialog.getByText("Student Portfolio", { exact: true }), "color"))
       .toBe("rgb(113, 113, 122)");
   });
 

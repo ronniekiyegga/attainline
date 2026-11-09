@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { Router } from "express";
 import { after, test, type TestContext } from "node:test";
 import { createApp } from "../src/app.js";
 import { hashPassword } from "../src/features/auth/password.js";
@@ -62,6 +63,7 @@ async function startApi(context: TestContext) {
       cursorCodec: createStudentCursorCodec(randomBytes(32)),
       logger,
     }),
+    assessmentRouter: Router(),
   });
 
   return listen(context, app);

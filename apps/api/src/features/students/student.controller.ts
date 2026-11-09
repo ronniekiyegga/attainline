@@ -7,11 +7,17 @@ import {
   createStudentPaginationSchema,
   studentDetailsQuerySchema,
 } from "./student.pagination.js";
-import type { StudentAccess } from "./student.repository.js";
+import type {
+  findStudent,
+  listAcademicYearStarts,
+  StudentAccess,
+} from "./student.repository.js";
 import type { StudentService } from "./student.service.js";
 
 type StudentControllerDependencies = {
-  service: StudentService;
+  directory: StudentService;
+  queryStudent: typeof findStudent;
+  queryAcademicYearStarts: typeof listAcademicYearStarts;
   cursorCodec: StudentCursorCodec;
   logger: Logger;
 };
@@ -28,7 +34,9 @@ function rejectPagination(response: Response) {
 }
 
 export function createStudentController({
-  service,
+  directory,
+  queryStudent,
+  queryAcademicYearStarts,
   cursorCodec,
   logger,
 }: StudentControllerDependencies) {
@@ -49,7 +57,7 @@ export function createStudentController({
     }
 
     try {
-      response.json({ academicYearStarts: await service.listAcademicYears(studentAccess(response)) });
+      response.json({ academicYearStarts: await queryAcademicYearStarts(studentAccess(response)) });
     } catch (error) {
       respondUnavailable(response, "students.academic_years_failed", error);
     }
@@ -65,11 +73,11 @@ export function createStudentController({
     }
 
     try {
-      const student = await service.findStudent(
-        studentAccess(response),
-        studentId.data,
-        query.data.academicYearStart,
-      );
+      const student = await queryStudent({
+        access: studentAccess(response),
+        studentId: studentId.data,
+        academicYearStart: query.data.academicYearStart,
+      });
 
       if (!student) {
         response.status(404).json({ error: "Student not found" });
@@ -93,7 +101,7 @@ export function createStudentController({
     const { q, limit, ...query } = pagination.data;
 
     try {
-      const result = await service.listDirectory(studentAccess(response), {
+      const result = await directory.listDirectory(studentAccess(response), {
         ...query,
         limit,
         search: q || undefined,

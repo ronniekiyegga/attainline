@@ -12,6 +12,7 @@ type AppDependencies = {
   checkDatabase: () => Promise<void>;
   authRouter: Router;
   studentRouter: Router;
+  assessmentRouter: Router;
   requireSession: RequestHandler;
   logger: Logger;
 };
@@ -20,6 +21,7 @@ export function createApp({
   checkDatabase,
   authRouter,
   studentRouter,
+  assessmentRouter,
   requireSession,
   logger,
 }: AppDependencies) {
@@ -49,6 +51,7 @@ export function createApp({
   });
 
   app.use("/auth", authRouter);
+  app.use("/students/:studentId/assessments", requireSession, assessmentRouter);
   app.use("/students", requireSession, studentRouter);
 
   app.use((_request, response) => {

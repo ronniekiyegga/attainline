@@ -4,7 +4,11 @@ import { readSessionToken } from "@/features/auth/session";
 import { requestApi } from "@/server/attainline-api";
 import {
   academicYearsSchema,
+  studentAssessmentsSchema,
+  studentDetailsSchema,
   studentPageSchema,
+  type StudentAssessments,
+  type StudentDetails,
   type StudentPage,
 } from "./student-page.schema";
 import type { StudentSort } from "./student-sort";
@@ -72,4 +76,51 @@ export async function getStudents({
   }
 
   return result.status === "success" ? result : { status: "unavailable" };
+}
+
+export type StudentProfileResult =
+  | {
+      status: "success";
+      details: StudentDetails;
+      assessments: StudentAssessments | null;
+    }
+  | { status: "not-found" }
+  | { status: "unavailable" };
+
+export async function getStudentProfile(
+  studentId: string,
+  academicYearStart: number,
+): Promise<StudentProfileResult> {
+  const sessionToken = await readSessionToken();
+  const query = { academicYearStart: String(academicYearStart) };
+  const path = `students/${encodeURIComponent(studentId)}`;
+
+  const [details, assessments] = await Promise.all([
+    requestApi({ path, query, sessionToken, schema: studentDetailsSchema, expectedStatuses: [404] }),
+    requestApi({
+      path: `${path}/assessments`,
+      query,
+      sessionToken,
+      schema: studentAssessmentsSchema,
+      expectedStatuses: [404],
+    }),
+  ]);
+
+  if (details.status === "unauthenticated" || assessments.status === "unauthenticated") {
+    redirect("/sign-in");
+  }
+
+  if (details.status === "rejected") {
+    return { status: "not-found" };
+  }
+
+  if (details.status === "unavailable" || details.data.id !== studentId) {
+    return { status: "unavailable" };
+  }
+
+  return {
+    status: "success",
+    details: details.data,
+    assessments: assessments.status === "success" ? assessments.data : null,
+  };
 }

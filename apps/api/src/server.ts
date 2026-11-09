@@ -7,6 +7,10 @@ import * as authRepository from "./features/auth/auth.repository.js";
 import { createAuthRouter } from "./features/auth/auth.routes.js";
 import { createAuthService } from "./features/auth/auth.service.js";
 import { createSessionGuard } from "./features/auth/require-session.js";
+import { createAssessmentController } from "./features/assessments/assessment.controller.js";
+import { listResultsUpToYear } from "./features/assessments/assessment.repository.js";
+import { createAssessmentRouter } from "./features/assessments/assessment.routes.js";
+import { createAssessmentService } from "./features/assessments/assessment.service.js";
 import {
   createStudentCursorCodec,
   parseStudentCursorKey,
@@ -38,12 +42,9 @@ const requireSession = createSessionGuard({
   logger,
 });
 
-const studentService = createStudentService({
-  queryStudents: listStudents,
-  queryStudent: findStudent,
-  queryAcademicYearStarts: listAcademicYearStarts,
-  cursorCodec,
-});
+const studentDirectory = createStudentService({ queryStudents: listStudents, cursorCodec });
+
+const assessmentService = createAssessmentService({ findStudent, listResultsUpToYear });
 
 const app = createApp({
   checkDatabase,
@@ -54,7 +55,16 @@ const app = createApp({
     requireSession,
   }),
   studentRouter: createStudentRouter(
-    createStudentController({ service: studentService, cursorCodec, logger }),
+    createStudentController({
+      directory: studentDirectory,
+      queryStudent: findStudent,
+      queryAcademicYearStarts: listAcademicYearStarts,
+      cursorCodec,
+      logger,
+    }),
+  ),
+  assessmentRouter: createAssessmentRouter(
+    createAssessmentController({ service: assessmentService, logger }),
   ),
 });
 

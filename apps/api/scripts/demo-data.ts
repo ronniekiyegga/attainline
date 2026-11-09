@@ -116,3 +116,117 @@ export const demoStaff: DemoStaff[] = [
     ],
   },
 ];
+
+type DemoMeasure =
+  | "CAT4_VERBAL"
+  | "CAT4_QUANTITATIVE"
+  | "CAT4_NON_VERBAL"
+  | "CAT4_SPATIAL"
+  | "CAT4_MEAN"
+  | "NGRT_READING"
+  | "PTE"
+  | "PTM"
+  | "PTS";
+
+type DemoSitting = {
+  measure: DemoMeasure;
+  month: number;
+  day: number;
+  rawScoreMaximum?: number;
+};
+
+const CAT4_BATTERIES: DemoMeasure[] = ["CAT4_VERBAL", "CAT4_QUANTITATIVE", "CAT4_NON_VERBAL", "CAT4_SPATIAL"];
+
+const demoSittings: Record<number, DemoSitting[]> = {
+  2025: [
+    ...CAT4_BATTERIES.map((measure) => ({ measure, month: 10, day: 6 })),
+    { measure: "NGRT_READING", month: 10, day: 8 },
+    { measure: "PTE", month: 6, day: 15, rawScoreMaximum: 50 },
+    { measure: "PTM", month: 6, day: 16, rawScoreMaximum: 60 },
+    { measure: "PTS", month: 6, day: 17, rawScoreMaximum: 50 },
+  ],
+  2026: [
+    ...CAT4_BATTERIES.map((measure) => ({ measure, month: 10, day: 5 })),
+    { measure: "NGRT_READING", month: 10, day: 7 },
+  ],
+};
+
+const STANINE_UPPER_BOUNDS = [73, 81, 88, 96, 103, 111, 118, 126];
+
+export function stanineFor(standardAgeScore: number): number {
+  return STANINE_UPPER_BOUNDS.findIndex((bound) => standardAgeScore <= bound) + 1 || 9;
+}
+
+function normalCumulative(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const density = Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI);
+  const tail = density * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return z >= 0 ? 1 - tail : tail;
+}
+
+export function percentileFor(standardAgeScore: number): number {
+  return Math.min(99, Math.max(1, Math.round(100 * normalCumulative((standardAgeScore - 100) / 15))));
+}
+
+function demoStandardAgeScore(referenceNumber: number, measure: DemoMeasure, academicYearStart: number): number {
+  const measureIndex = [...CAT4_BATTERIES, "NGRT_READING", "PTE", "PTM", "PTS"].indexOf(measure);
+  const ability = ((referenceNumber * 23) % 37) - 18;
+  const measureVariation = ((referenceNumber * 7 + measureIndex * 11) % 13) - 6;
+  const yearVariation = ((referenceNumber + academicYearStart + measureIndex * 3) % 9) - 4;
+  return 100 + ability + measureVariation + yearVariation;
+}
+
+export function demoAssessmentResults(
+  organisationId: string,
+  students: { id: string; institutionStudentRef: string }[],
+  academicYearStart: number,
+) {
+  return students.flatMap((student) => {
+    if (!demoPlacement(student.institutionStudentRef, academicYearStart)) {
+      return [];
+    }
+
+    const referenceNumber = Number(referencePattern.exec(student.institutionStudentRef)?.[1]);
+
+    const sittings = (demoSittings[academicYearStart] ?? []).map(({ measure, month, day, rawScoreMaximum }) => {
+      const standardAgeScore = demoStandardAgeScore(referenceNumber, measure, academicYearStart);
+      const year = month >= 9 ? academicYearStart : academicYearStart + 1;
+
+      return {
+        organisationId,
+        studentId: student.id,
+        measure,
+        academicYearStart,
+        satOn: new Date(Date.UTC(year, month - 1, day)),
+        standardAgeScore,
+        stanine: stanineFor(standardAgeScore),
+        nationalPercentileRank: percentileFor(standardAgeScore),
+        rawScore: rawScoreMaximum === undefined
+          ? null
+          : Math.round(rawScoreMaximum * (standardAgeScore - 60) / 81),
+        rawScoreMaximum: rawScoreMaximum ?? null,
+      };
+    });
+
+    const batteries = sittings.filter(({ measure }) => CAT4_BATTERIES.includes(measure));
+
+    if (batteries.length === 0) {
+      return sittings;
+    }
+
+    const meanScore = Math.round(
+      batteries.reduce((sum, { standardAgeScore }) => sum + standardAgeScore, 0) / batteries.length,
+    );
+
+    return [
+      ...sittings,
+      {
+        ...batteries[0],
+        measure: "CAT4_MEAN" as const,
+        standardAgeScore: meanScore,
+        stanine: stanineFor(meanScore),
+        nationalPercentileRank: percentileFor(meanScore),
+      },
+    ];
+  });
+}

@@ -3,6 +3,7 @@ import { hashPassword } from "../src/features/auth/password.js";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import {
   DEMO_ACADEMIC_YEAR_STARTS,
+  demoAssessmentResults,
   demoEnrolments,
   demoOrganisations,
   demoStaff,
@@ -111,6 +112,16 @@ try {
         return placement?.yearGroup !== enrolment.yearGroup
           || placement.classGroup !== enrolment.classGroup;
       });
+
+      const results = demoAssessmentResults(organisation.id, stored, academicYearStart);
+      const addedResults = await database.assessmentResult.createMany({
+        data: results,
+        skipDuplicates: true,
+      });
+
+      console.info(
+        `${organisation.id} ${academicYearStart}: added ${addedResults.count} of ${results.length} demo assessment results`,
+      );
 
       console.info(
         `${organisation.id} ${academicYearStart}: added ${addedEnrolments.count} of ${enrolments.length} demo enrolments`

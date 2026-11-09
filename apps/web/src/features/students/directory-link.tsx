@@ -43,6 +43,10 @@ export function directoryHref({
   return query ? `/?${query}` : "/";
 }
 
+export function studentProfileHref(studentId: string, location: DirectoryLocation): string {
+  return `/students/${encodeURIComponent(studentId)}${directoryHref(location).slice(1)}`;
+}
+
 export function DirectoryLink(props: ComponentProps<typeof Link>) {
   return <Link className={directoryLinkClass} {...props} />;
 }

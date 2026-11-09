@@ -2,13 +2,13 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState, type ReactNode } from "react";
-import { directoryHref, type DirectoryLocation } from "./directory-link";
-import { optionalColumns, useStudentColumns } from "./student-columns";
+import type { ReactNode } from "react";
 import {
-  StudentDetailsDialog,
-  type SelectedStudent,
-} from "./student-details-dialog";
+  directoryHref,
+  studentProfileHref,
+  type DirectoryLocation,
+} from "./directory-link";
+import { optionalColumns, useStudentColumns } from "./student-columns";
 import type { StudentPage } from "./student-page.schema";
 import { DEFAULT_STUDENT_SORT, type StudentSort } from "./student-sort";
 
@@ -53,13 +53,6 @@ function displayName(student: Student) {
   return student.firstName
     ? `${student.firstName} ${student.surname}`
     : student.surname;
-}
-
-function initials(student: Student) {
-  return [student.firstName, student.surname]
-    .flatMap((part) => (part ? [part[0]] : []))
-    .join("")
-    .toUpperCase();
 }
 
 function SortableStudentHeader({ location }: { location: DirectoryLocation }) {
@@ -107,13 +100,10 @@ export function StudentTable({
   location,
 }: StudentTableProps) {
   const { isVisible } = useStudentColumns();
-  const [selected, setSelected] = useState<SelectedStudent | null>(null);
-  const openerRef = useRef<HTMLButtonElement | null>(null);
   const visibleHeaders = optionalColumns.filter(({ id }) => isVisible(id));
 
   return (
-    <>
-      <TableFrame
+    <TableFrame
         caption={caption}
         header={
           <>
@@ -168,34 +158,21 @@ export function StudentTable({
                 </td>
               )}
               <td className="px-4 py-2 text-right align-middle">
-                <button
-                  type="button"
-                  aria-label={`View details for ${displayName(student)}`}
-                  onClick={(event) => {
-                    openerRef.current = event.currentTarget;
-                    setSelected({
-                      details: student,
-                      name: displayName(student),
-                      initials: initials(student),
-                    });
-                  }}
+                <Link
+                  href={studentProfileHref(student.id, location)}
+                  scroll={false}
+                  prefetch={false}
+                  data-profile-link={student.id}
+                  aria-label={`View profile for ${displayName(student)}`}
                   className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-zinc-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   View
-                </button>
+                </Link>
               </td>
             </tr>
           ))
         )}
       </TableFrame>
-
-      <StudentDetailsDialog
-        student={selected}
-        year={location.year}
-        returnFocusTo={openerRef}
-        onClose={() => setSelected(null)}
-      />
-    </>
   );
 }
 

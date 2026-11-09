@@ -4,7 +4,8 @@ import { DashboardShell } from "@/features/shell/dashboard-shell";
 
 export default function DashboardLayout({
   children,
-}: Readonly<{ children: ReactNode }>) {
+  modal,
+}: Readonly<{ children: ReactNode; modal: ReactNode }>) {
   return (
     <DashboardShell
       account={
@@ -14,6 +15,7 @@ export default function DashboardLayout({
       }
     >
       {children}
+      {modal}
     </DashboardShell>
   );
 }

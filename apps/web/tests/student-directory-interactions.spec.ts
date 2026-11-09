@@ -237,25 +237,29 @@ test.describe("student directory refresh", () => {
   });
 });
 
-test.describe("student details", () => {
-  test("opens by keyboard, shows the placement and returns focus", async ({
+test.describe("student profile", () => {
+  const averyId = "0a3f5c1e-1111-4111-8111-000000000001";
+
+  test("opens by keyboard as a dialog, closes with Escape and returns focus", async ({
     page,
     request,
   }) => {
     await useScenario(request, "populated");
     await page.goto("/");
 
-    const opener = page.getByRole("button", { name: "View details for Brackenridge" });
+    const opener = page.getByRole("link", { name: "View profile for Brackenridge" });
     await opener.focus();
     await page.keyboard.press("Enter");
 
     const dialog = page.getByRole("dialog", { name: "Brackenridge" });
     await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(/\/students\/0a3f5c1e-1111-4111-8111-000000000002\?year=2026$/);
     await expect(dialog.getByText("Placement for 2026/27")).toBeVisible();
     await expect(dialog.getByRole("definition")).toHaveText([
       "DEMO-SYN-002",
       "Year 7",
       "Not recorded",
+      "Monitoring",
     ]);
     await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
 
@@ -264,22 +268,87 @@ test.describe("student details", () => {
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL("/");
     await expect(opener).toBeFocused();
+    await expect(page.getByRole("table").getByRole("rowheader")).toHaveText(["Avery Ashgrove", "Brackenridge"]);
   });
 
-  test("shows the selected row without requesting it again", async ({
+  test("shows each assessment on its own scale and only compares recorded sittings", async ({
     page,
     request,
   }) => {
     await useScenario(request, "populated");
     await page.goto("/");
-    const listRequests = (await receivedRequests(request)).length;
+    await page.getByRole("link", { name: "View profile for Avery Ashgrove" }).click();
 
-    await page.getByRole("button", { name: "View details for Avery Ashgrove" }).click();
-    await expect(page.getByRole("dialog", { name: "Avery Ashgrove" }).getByRole("definition"))
-      .toHaveText(["DEMO-SYN-001", "Year 7", "7A"]);
+    const dialog = page.getByRole("dialog", { name: "Avery Ashgrove" });
+    const results = dialog.getByRole("region", { name: "Assessment results for 2026/27" });
+    await expect(dialog.getByText("At Risk").first()).toBeVisible();
+    await expect(results.getByRole("listitem")).toHaveText([
+      /Status and priority.*Average standard age score 97.5 across CAT4 mean and NGRT reading\..*High priority.*CAT4 quantitative reasoning SAS 88/,
+      /^CAT4 mean5 Oct 2026Standard age score 103 · stanine 5 · 58th percentilePrevious sitting 6 Oct 2025: SAS 96, stanine 4 \(SAS \+7\)$/,
+      /^CAT4 quantitative reasoning5 Oct 2026Standard age score 88 · stanine 3 · 21st percentileNo earlier sitting recorded$/,
+      /^NGRT reading7 Oct 2026Standard age score 92 · stanine 4 · 30th percentileNo earlier sitting recorded$/,
+    ]);
+    await expect(results).not.toContainText("progress");
 
-    expect(await receivedRequests(request)).toHaveLength(listRequests);
+    const profileRequests = (await receivedRequests(request))
+      .filter(({ path }) => path.startsWith(`/students/${averyId}`));
+    expect(profileRequests.map(({ path }) => path).sort()).toEqual([
+      `/students/${averyId}`,
+      `/students/${averyId}/assessments`,
+    ]);
+    expect(profileRequests.every(({ authorization }) => authorization?.startsWith("Bearer "))).toBe(true);
+  });
+
+  test("leaves the directory page, search and URL untouched behind the profile", async ({
+    page,
+    request,
+  }) => {
+    await useScenario(request, "populated");
+    await page.goto("/?year=2026&cursor=page-2");
+    await expect(page.getByRole("table").getByRole("rowheader")).toHaveText(["Calla Cindermoor"]);
+    const listRequests = (await studentListRequests(request)).length;
+
+    await page.getByRole("link", { name: "View profile for Calla Cindermoor" }).click();
+    await expect(page.getByRole("dialog", { name: "Calla Cindermoor" })).toBeVisible();
+    await expect(page).toHaveURL(/\/students\/0a3f5c1e-1111-4111-8111-000000000003\?year=2026&cursor=page-2$/);
+
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL("/?year=2026&cursor=page-2");
+    await expect(page.getByRole("table").getByRole("rowheader")).toHaveText(["Calla Cindermoor"]);
+    expect(await studentListRequests(request)).toHaveLength(listRequests);
+  });
+
+  test("opens a shared profile link as a page", async ({ page, request }) => {
+    await useScenario(request, "populated");
+    await page.goto(`/students/${averyId}?year=2026`);
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Avery Ashgrove" })).toBeVisible();
+    await page.getByRole("link", { name: "Back to directory" }).click();
+    await expect(page).toHaveURL("/?year=2026");
+  });
+
+  test("explains missing, failed and out-of-scope profile data", async ({ page, request }) => {
+    await useScenario(request, "populated");
+    await page.goto("/students/0a3f5c1e-1111-4111-8111-000000000002?year=2026");
+    await expect(page.getByText("No assessment results recorded in 2026/27.")).toBeVisible();
+    await expect(page.getByText("No CAT4 mean, Progress Test in English or NGRT reading result in 2026/27.")).toBeVisible();
+
+    await useScenario(request, "assessments-unavailable");
+    await page.goto(`/students/${averyId}?year=2026`);
+    await expect(page.getByRole("heading", { level: 1, name: "Avery Ashgrove" })).toBeVisible();
+    await expect(page.getByRole("status")).toHaveText("Assessment results are temporarily unavailable.");
+
+    await useScenario(request, "populated");
+    await page.goto("/students/0a3f5c1e-1111-4111-8111-000000000004?year=2026");
+    await expect(page.getByRole("heading", { level: 1, name: "Student not available" })).toBeVisible();
+
+    for (const link of ["/students/not-a-uuid?year=2026", `/students/${averyId}`]) {
+      await page.goto(link);
+      await expect(page.getByRole("heading", { level: 1, name: "This student link is invalid" })).toBeVisible();
+    }
   });
 });
 
@@ -306,7 +375,7 @@ test.describe("student directory layout", () => {
       expect(await overflow()).toBe(false);
 
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "View details for Avery Ashgrove" }).click();
+      await page.getByRole("link", { name: "View profile for Avery Ashgrove" }).click();
       await expect(page.getByRole("dialog", { name: "Avery Ashgrove" })
         .getByRole("definition").first()).toHaveText("DEMO-SYN-001");
       expect(await overflow()).toBe(false);

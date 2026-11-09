@@ -36,7 +36,8 @@ type Scenario =
   | "no-enrolments"
   | "unavailable"
   | "list-unavailable"
-  | "session-expired";
+  | "session-expired"
+  | "assessments-unavailable";
 
 type ScenarioOptions = {
   listDelay?: number;

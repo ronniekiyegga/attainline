@@ -14,6 +14,7 @@ async function startApp(
     logger,
     authRouter: Router(),
     studentRouter: Router(),
+    assessmentRouter: Router(),
     requireSession: (_request, _response, next) => next(),
   });
 

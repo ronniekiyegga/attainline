@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  demoAssessmentResults,
   demoEnrolments,
   demoOrganisations,
   demoPlacement,
   demoReference,
   demoStaff,
   demoStudents,
+  percentileFor,
+  stanineFor,
 } from "../scripts/demo-data.js";
 
 const [academy] = demoOrganisations;
@@ -73,4 +76,55 @@ test("demo staff use reserved addresses and valid memberships", () => {
       assert.equal(membership.role === "HEADTEACHER", membership.yearGroups.length === 0);
     }
   }
+});
+
+test("maps standard age scores to the standard stanine bands and percentiles", () => {
+  for (const [score, stanine] of [
+    [60, 1], [73, 1], [74, 2], [81, 2], [82, 3], [88, 3], [89, 4], [96, 4],
+    [97, 5], [103, 5], [104, 6], [111, 6], [112, 7], [118, 7], [119, 8], [126, 8], [127, 9], [141, 9],
+  ]) {
+    assert.equal(stanineFor(score), stanine, String(score));
+  }
+
+  assert.equal(percentileFor(100), 50);
+  assert.equal(percentileFor(115), 84);
+  assert.equal(percentileFor(85), 16);
+  assert.equal(percentileFor(60), 1);
+  assert.equal(percentileFor(141), 99);
+});
+
+test("demo assessment results respect the database rules and enrolments", () => {
+  const stored = storedStudents();
+
+  for (const year of [2025, 2026]) {
+    const results = demoAssessmentResults(academy.id, stored, year);
+    const enrolled = new Set(demoEnrolments(academy.id, stored, year).map(({ studentId }) => studentId));
+    const sittings = new Set<string>();
+
+    assert.ok(results.length > 0);
+
+    for (const result of results) {
+      const key = `${result.studentId}:${result.measure}:${result.satOn.toISOString()}`;
+      assert.ok(!sittings.has(key), key);
+      sittings.add(key);
+
+      assert.ok(enrolled.has(result.studentId));
+      assert.ok(result.satOn >= new Date(Date.UTC(year, 8, 1)) && result.satOn < new Date(Date.UTC(year + 1, 8, 1)));
+      assert.ok(result.satOn <= new Date(Date.UTC(2026, 10, 9)), "no sittings after the demo date");
+      assert.ok(result.standardAgeScore >= 60 && result.standardAgeScore <= 141);
+      assert.equal(result.stanine, stanineFor(result.standardAgeScore));
+      assert.ok(result.nationalPercentileRank >= 1 && result.nationalPercentileRank <= 99);
+      assert.equal(result.rawScore === null, result.rawScoreMaximum === null);
+      if (result.rawScore !== null && result.rawScoreMaximum !== null) {
+        assert.ok(result.rawScore >= 0 && result.rawScore <= result.rawScoreMaximum);
+      }
+    }
+  }
+
+  const statuses = new Set(
+    demoAssessmentResults(academy.id, stored, 2026)
+      .filter(({ measure }) => measure === "CAT4_MEAN")
+      .map(({ standardAgeScore }) => standardAgeScore >= 100 ? "on" : standardAgeScore >= 90 ? "mid" : "off"),
+  );
+  assert.deepEqual([...statuses].sort(), ["mid", "off", "on"]);
 });
