@@ -1,129 +1,304 @@
 # Attainline
 
-School analytics for understanding student attainment, attendance and
-intervention priorities.
+Attainline is a full-stack school assessment analytics application for teachers,
+heads of year and headteachers. It turns enrolment and standardised assessment
+records into role-scoped dashboards, rankings, a student directory and profiles.
+The public repository supports independently invented demo data only.
 
-This repository contains an incremental rebuild of EduFeedbackPro.
-Existing features are being reviewed and migrated individually.
+## What it does
 
-## Current implementation
+- Gives teachers and heads of year dashboard and directory views restricted to their assigned year groups.
+- Gives headteachers whole-school analytics and supports switching between active school memberships.
+- Presents CAT4, NGRT and Progress Test results without collapsing their standard age score, stanine, percentile and raw-score scales.
+- Calculates one shared set of status, priority and ranking rules for student profiles, dashboards and rankings.
+- Keeps directory search, sorting, academic year and pagination in the URL so views survive refresh and can be shared within the demo.
 
-- Student directory page at `/`, inside a dashboard shell (sidebar,
-  header, collapsed icon rail and mobile navigation dialog).
-- Student profile at `/students/<id>?year=`, opened from the directory as
-  a dialog or directly as a page, with that year's CAT4, NGRT and Progress
-  Test results, each result's previous sitting, and EduFeedbackPro's
-  status and priority definitions.
-- Staff sign-in with server-side sessions, school memberships, switching
-  between schools and sign-out. The shell shows the signed-in staff member,
-  their role and the active school.
-- Teacher and leadership dashboards at `/dashboard`, cohort analytics at
-  `/analytics`, and assessment rankings at `/rankings`, with school and
-  assigned-year-group restrictions enforced by the API.
-- Express API with separate HTTP liveness and database readiness endpoints.
-- Prisma schema and migrations for organisations, students, annual
-  enrolments, assessment results, staff users, memberships, year-group
-  assignments, sessions and sign-in throttling.
-- Student directory API restricted to the session's school and, for heads
-  of year and teachers, their assigned year groups, with academic-year
-  placement (year group and class), server-side search and encrypted keyset
-  cursors bound to the year and search.
-- Request IDs shared by the web app and API, and structured JSON failure logs.
-- API unit tests, PostgreSQL integration tests and Playwright browser tests.
-- pnpm workspace with TypeScript and one root lockfile.
-- GitHub Actions for linting, type checking, tests, builds and browser tests.
-- Multi-stage API Docker image and local PostgreSQL through Compose.
+## Product views
 
-Only independently invented demo records are supported. See
-[Authentication](#authentication) for what the access model does and does
-not cover.
+The visuals below are the approved EduFeedbackPro presentation reference. The
+public Attainline build keeps its assessment and access-control architecture while
+excluding integrations that are outside the repository's stated scope.
 
-## Scope boundary
+### SLT & Teacher dashboard
 
-Not planned for this rebuild: question-level analysis, interventions,
-attendance, notifications, spreadsheet or warehouse imports and the
-conversational assistant.
+![SLT and teacher dashboard with performance cards, calendar, ranking, updates and student face cards](docs/readme-assets/dashboard/slt-teacher-dashboard-overview.webp)
 
-## Structure
+| Student Card | File Uploader |
+| --- | --- |
+| ![Student Card showing a synthetic learner's status and assessment reports](docs/readme-assets/dashboard/student-card-modal.webp) | ![File Uploader design with drop zone and assessment folders](docs/readme-assets/dashboard/file-uploader-modal.webp) |
 
-- `apps/web`: Next.js frontend. Features live in `src/features/<feature>`;
-  server-only calls to the API go through `src/server/attainline-api.ts`.
-- `apps/api`: Express API. Each feature in `src/features/<feature>` has a
-  router (endpoints and middleware), a controller (request validation and
-  HTTP responses), a service (business rules and use cases) and a
-  repository (Prisma queries). The Prisma schema and migrations hold the
-  models, relations and constraints.
+| Command | Ranking component |
+| --- | --- |
+| ![Command panel for finding learning resources and announcements](docs/readme-assets/dashboard/command-panel.webp) | ![Circular ranking component placing a synthetic student result in cohort context](docs/readme-assets/analytics/ranking-circular.webp) |
 
-The web app bundles Inter 4.001 by The Inter Project Authors under the
-SIL Open Font License 1.1; the licence is in
-`apps/web/public/fonts/LICENSE.txt`.
+The Student Card and ranking views inform the migrated workflows. File upload,
+command and legacy assistant affordances visible in the source artwork are not
+enabled in this public build.
 
-## Local development
+### Assessment analytics
 
-Requirements: Node.js 24 and pnpm 12.8.1.
+![Year-group attainment analytics comparing internal and external assessment results](docs/readme-assets/analytics/year-group-attainment.png)
 
-Install dependencies from the repository root:
+## Architecture
 
-```bash
-pnpm install --frozen-lockfile
+The browser talks only to Next.js. Server Components load protected data, and
+Server Actions handle sign-in, sign-out and school switching. Next.js keeps the
+opaque session token in an `HttpOnly` cookie; Express remains the authentication
+and authorisation authority.
+
+![Request and authorisation flow from the browser through Next.js and Express to scoped PostgreSQL queries](docs/readme-assets/architecture/request-authorisation-flow.svg)
+
+The API is organised by feature. Routes define endpoints and middleware, controllers validate HTTP input, services own use cases and calculations, and repositories own Prisma queries. PostgreSQL constraints reinforce organisation, membership, enrolment, session and assessment relationships.
+
+## Engineering decisions
+
+### 1. Scope reads before rows leave PostgreSQL
+
+**Problem and constraints.** One account can belong to several schools, while
+teachers and heads of year may see only assigned year groups. The API must hold
+that boundary even when it is called without the Next.js interface.
+
+**Alternatives.** Fetching a broad cohort and filtering in application code
+would make one missed filter a data disclosure. PostgreSQL Row-Level Security
+(RLS) could add a database-enforced boundary, but would require transaction-local
+identity context, policies and tests alongside Prisma's connection pooling.
+
+**Decision and evidence.** Express reloads the stored session and active
+membership on every protected request. Repositories then include its school and
+year-group scope in the query itself. This is the actual directory query:
+
+```ts
+const conditions: Prisma.StudentWhereInput[] = [
+  { enrolments: { some: visibleEnrolment(access, academicYearStart) } },
+];
+
+if (search) {
+  conditions.push(matchesSearch(search));
+}
+
+if (after) {
+  conditions.push(isAfter(after, direction));
+}
+
+const students = await database.$transaction(
+  (transaction) => transaction.student.findMany({
+    where: { organisationId: access.organisationId, AND: conditions },
+    select: placementSelect(access, academicYearStart),
+    orderBy: [{ surname: direction }, { id: direction }],
+    take: limit + 1,
+  }),
+  { isolationLevel: "RepeatableRead" },
+);
 ```
 
-Copy `apps/api/.env.example` to `apps/api/.env`. Configure `DATABASE_URL`
-there, and set `STUDENT_CURSOR_KEY` to the output of
-`openssl rand -base64 32`. The API refuses to start without a valid key.
+The enrolment predicate adds `yearGroup: { in: access.yearGroups }` for scoped
+roles. See the [directory repository](apps/api/src/features/students/student.repository.ts#L64-L71),
+[query](apps/api/src/features/students/student.repository.ts#L112-L150) and
+[cross-organisation integration test](apps/api/tests/auth.integration.test.ts#L370-L397).
 
-Point `DATABASE_URL` at the local Docker database below, or at another
-database that holds only independently invented records.
+**Trade-off.** This is application-enforced query scoping, not RLS: every new
+repository read must apply the same rule. RLS would provide useful defence in
+depth before processing real student data, but adds operational context and
+policy-migration complexity that the synthetic demonstration does not currently
+carry. Stateful sessions also add one database lookup per protected request,
+while making revocation, expiry and membership suspension effective immediately.
+See [Authentication and sessions](docs/decisions/authentication-and-sessions.md).
 
-The web app reads the API location from `ATTAINLINE_API_URL`. Copy
-`apps/web/.env.example` to `apps/web/.env.local`, which sets
-`ATTAINLINE_API_URL=http://localhost:4100`.
-A path in that URL is kept as a prefix, so `http://host/api` requests
-`http://host/api/students`; any query string or fragment is ignored.
+### 2. Use context-bound keyset cursors
 
-For local PostgreSQL:
+**Problem.** Offset pages can drift as rows are inserted or removed, and a bare
+surname/ID cursor would expose stable record details in the URL.
+
+| Option | Strength | Cost |
+| --- | --- | --- |
+| Offset (`page=10`) | Arbitrary page jumps | Later pages scan/skip more rows and can shift under writes |
+| Keyset (`after=surname,id`) | Continues from a stable, indexed order | Forward navigation only; no arbitrary page jump |
+
+**Decision.** The directory orders by surname, then ID as a unique tie-breaker,
+fetches `limit + 1`, and continues after the final visible row. AES-256-GCM
+encrypts and authenticates the cursor. The decoded payload is separately bound
+to organisation, academic year, sort direction and the exact search hash:
+
+```ts
+if (
+  cursor &&
+  (cursor.organisationId !== access.organisationId ||
+    cursor.academicYearStart !== academicYearStart ||
+    cursor.sort !== sort ||
+    cursor.searchHash !== boundSearch)
+) {
+  return { status: "invalid-cursor" } as const;
+}
+```
+
+See the [context check](apps/api/src/features/students/student.service.ts#L25-L35),
+[AES-GCM codec](apps/api/src/features/students/student.cursor.ts#L101-L144) and
+[replay tests](apps/api/tests/students.routes.test.ts#L325-L362).
+
+**Trade-off.** Encryption prevents reading and undetected editing of the payload;
+it is not authorisation. Repository scope remains authoritative. Results are not
+a snapshot: a surname edit can move a row between requests, and the interface
+cannot jump directly to page 10. See [Student directory search](docs/decisions/student-directory-search.md).
+
+### 3. Search the scoped dataset, not the loaded page
+
+**Problem.** The browser holds one directory page, so client filtering would
+silently omit matching students on later pages.
+
+| Alternative | Decision boundary |
+| --- | --- |
+| Client filtering | Rejected: incomplete over a paginated dataset |
+| PostgreSQL substring search | Selected: one scoped query and no indexing pipeline |
+| Separate search service | Deferred: adds deployment, synchronisation and failure modes without measured need |
+
+Prisma applies escaped, case-insensitive `contains` predicates for first name,
+surname and institution reference before keyset pagination. Search submission is
+explicit rather than request-per-keystroke. The current B-tree index supports the
+organisation/surname order, not arbitrary substring matching; there is no
+established search-latency or scale result. PostgreSQL trigram indexing is the
+next option if measurements justify it. See the [search predicate](apps/api/src/features/students/student.repository.ts#L28-L48)
+and [PostgreSQL search tests](apps/api/tests/students.integration.test.ts#L274-L359).
+
+### 4. Keep protected reads in Server Components
+
+**Problem and alternatives.** Fetching directly from the browser to Express
+after hydration would send an empty shell first and require browser-held API
+credentials. A hydrated client could instead call a Next.js route that keeps the
+token and validation server-side, but adds another HTTP hop plus client loading
+and cache ownership. A client cache could improve repeated reads, while becoming
+another owner for authenticated state.
+
+**Decision and evidence.** Dashboard, analytics, rankings, directory and profile
+routes fetch in React Server Components. The Next.js boundary holds the token,
+uses `cache: "no-store"`, validates Express responses with feature-level Zod
+schemas and maps failures to explicit states. Client Components are reserved for
+interaction. Year, search, sort and cursor state live in the URL. Independent
+requests use `Promise.all` where possible—for example session/year resolution
+and profile details/assessments—while the dashboard overview waits for the
+validated year it needs. See the [API boundary](apps/web/src/server/attainline-api.ts#L85-L152),
+[dashboard composition](apps/web/src/app/%28dashboard%29/dashboard/page.tsx#L23-L66)
+and [directory orchestration](apps/web/src/features/students/student-directory.tsx#L34-L93).
+
+**Trade-off.** Protected navigation performs fresh server work and deliberately
+does not share data through a persistent browser cache. Suspense supplies route
+loading states, but there is still a dependent overview request after the year
+is resolved. Browser tests exercise the server-rendered contract with a stand-in
+API; PostgreSQL integration tests exercise Express and Prisma.
+
+### 5. Share indicator rules and rank in the API
+
+![Student data and analytics flow from scoped records through shared indicators to profiles, dashboards and rankings](docs/readme-assets/architecture/student-data-analytics-flow.svg)
+
+**Problem.** Browser-side aggregation would ship an oversized cohort and allow
+profiles and dashboards to calculate different results. Database window
+functions could rank efficiently, while maintained aggregates could make reads
+cheap, but both increase query or invalidation complexity.
+
+**Decision and evidence.** The API loads only visible cohort fields, selects the
+latest sitting per measure, and calls the same `calculateStatus`,
+`calculatePriority` and `compareRankedScores` functions used by student
+assessments. It applies deterministic score–surname–ID ordering before slicing
+the requested ranking page. See the [shared indicators](apps/api/src/features/assessments/assessment.indicators.ts#L28-L74),
+[analytics service](apps/api/src/features/analytics/analytics.service.ts#L146-L217)
+and [ranking unit test](apps/api/tests/analytics.test.ts#L73-L100).
+
+**Trade-off.** The response is paginated, but global rank still loads and sorts
+the selected visible cohort in API memory. That boundary is acceptable for the
+65-student demonstration, not a general scale claim. A larger measured workload
+should move latest-result selection and ranking to PostgreSQL window functions;
+maintained aggregates are warranted only when read volume offsets their write and
+rebuild complexity. See [Analytics and rankings](docs/decisions/analytics-and-rankings.md)
+and [Assessment results](docs/decisions/assessment-results.md).
+
+An earlier release review recorded the following local PostgreSQL 18 and
+service measurements against the synthetic fixture. They establish the current
+demonstration boundary; they are not production-scale claims.
+
+| Path | Measured local result |
+| --- | --- |
+| Directory page | 0.139 ms execution plan using the organisation/surname/ID index |
+| Substring search | 0.098 ms execution plan over the small scoped fixture |
+| Cohort and assessment read | 0.407 ms for 361 rows; 53 kB sort memory |
+| Ranking service | 30 warm runs over 61 visible students: 2.885 ms median, 4.121 ms p95, 5.616 ms maximum; 2,478-byte page response |
+
+See [Performance and complexity evidence](docs/performance.md) for complexity
+derivations, current query plans, scaled ranking measurements, frontend timings
+and the limits of comparison between them.
+
+## Verification
+
+The single CI job is fail-fast by step: any failed install, lint, type check,
+unit test, migration, integration test, production build or Chromium test keeps
+the commit from passing. PostgreSQL 18 runs as an isolated service and migrations
+are applied before database tests.
+
+```mermaid
+flowchart LR
+  A([Locked install]) --> B([Lint + TypeScript]) --> C([API unit tests])
+  C --> D([Migrate PostgreSQL 18]) --> E([Integration tests])
+  E --> F([Production builds]) --> G([Playwright / Chromium])
+```
+
+| Layer | Evidence from the release review |
+| --- | --- |
+| API unit tests | 53 passing tests for calculations, validation, sessions, cursors, seed safety and error handling |
+| PostgreSQL integration | 33 passing tests for constraints, isolation, search, pagination, assessments and analytics |
+| Browser | 63 passing Playwright tests, including full-stack readiness, the complete signed-in journey and 390, 768, 1024 and 1440 px layouts |
+| Static and production | Frontend lint, root TypeScript checks and both production builds passed on Node.js 24.19.0 |
+| CI | GitHub Actions installs the frozen lockfile, migrates an isolated PostgreSQL service, runs all checks and builds, then runs Chromium tests |
+
+CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+The repository does not provision or claim a public Attainline deployment.
+Reproducibility is provided by the local Docker, PostgreSQL, Next.js and Express
+workflow below, with verification enforced by GitHub Actions.
+
+### Failure-path evidence
+
+| Attempted operation | Expected behaviour | Evidence |
+| --- | --- | --- |
+| Read a student from another organisation or forge an organisation header | `404`, or the active school's rows only | [Organisation isolation](apps/api/tests/auth.integration.test.ts#L370-L397) |
+| Read outside an assigned year group | Directory/profile hide the row; disallowed analytics filter returns `403` | [Role scope](apps/api/tests/auth.integration.test.ts#L399-L426), [analytics scope](apps/api/tests/analytics.integration.test.ts#L62-L88) |
+| Reuse a cursor with another search, year or sort | `400 Invalid pagination`; repository query is not called | [Cursor context](apps/api/tests/students.routes.test.ts#L325-L362) |
+| Call protected APIs without a bearer session | `401 Authentication required` before student data | [Missing/invalid session](apps/api/tests/auth.integration.test.ts#L316-L341) |
+| Reuse a signed-out, expired or suspended session | `401` on the next protected request | [Session termination](apps/api/tests/auth.integration.test.ts#L343-L368) |
+| Lose the database or receive an API failure | Readiness or feature returns `503`; logs keep a request ID and omit private error text | [Readiness failure](apps/api/tests/readiness.test.ts#L35-L58), [safe feature failure](apps/api/tests/students.routes.test.ts#L246-L286) |
+
+### Operational boundaries
+
+Attainline exposes structured JSON errors, propagated request IDs, API liveness
+and database readiness checks. The web `/health` route verifies the API `/ready`
+boundary and returns `503` when the dependency is unavailable or exceeds its
+bounded timeout. A portable Playwright smoke journey can exercise an explicitly
+supplied target without encoding a hosting provider.
+
+No external log collector, retention policy or alerting service is configured.
+The [recovery procedure](docs/operations/deployment-recovery.md) separates
+application rollback from forward database recovery and prohibits using the
+synthetic seed as a general repair mechanism.
+
+## Running locally
+
+Requirements: Node.js 24, pnpm 12.8.1 and Docker with Compose.
+
+```bash
+git clone https://github.com/ronniekiyegga/edufeedback.git
+cd edufeedback
+pnpm install --frozen-lockfile
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+openssl rand -base64 32
+```
+
+Paste the generated value into `STUDENT_CURSOR_KEY` in `apps/api/.env`.
+The example environment files already target the local ports below.
 
 ```bash
 docker compose up -d --wait database
-```
-
-Apply migrations to the database configured in `apps/api/.env`:
-
-```bash
 pnpm --filter @attainline/api exec prisma migrate deploy
-```
-
-Migrations create the schema; they do not load data. To fill the local
-Docker database with invented demo students (65 across two fictional
-organisations, enough for three directory pages), their placements and
-CAT4, NGRT and Progress Test results for 2025/26 and 2026/27, and three demo
-staff accounts:
-
-```bash
 SEED_DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433/attainline" pnpm --filter @attainline/api seed:demo
 ```
 
-| Account | Access |
-| --- | --- |
-| `morgan.vale@example.test` | Headteacher at both fictional schools; can switch between them |
-| `rowan.thistle@example.test` | Head of year for Year 9 at Fictional Demo Academy |
-| `sasha.wren@example.test` | Teacher for Years 7 and 8 at Fictional Demo Academy |
-
-All demo accounts use `AttainlineDemo!2026`. The sign-in form fills this
-password automatically. Rerunning the seed resets these synthetic accounts
-to the same password.
-
-The seed refuses any target except the local `attainline` database. It
-only adds missing domain rows and resets the reserved demo account passwords;
-it never deletes existing rows, so it is safe to rerun. Each placement is derived from the student's `DEMO-`
-reference, never from row order. Students in Year 7 in 2026/27 have no
-2025/26 enrolment, some 2025/26 placements have no class, and surnames
-repeat. When an existing enrolment differs from the demo placement, the
-seed leaves it unchanged and reports how many differ. Every name and
-`DEMO-` reference in it is invented.
-Integration tests create their own fixtures and do not use it.
-
-Start each application in a separate terminal:
+Start the API and web app in separate terminals:
 
 ```bash
 pnpm dev:api
@@ -133,256 +308,45 @@ pnpm dev:api
 pnpm dev:web
 ```
 
-- Sign in: http://localhost:3100/sign-in, with a seeded demo account
-- Student directory: http://localhost:3100/
-- API health: http://localhost:4100/health
+Open [http://localhost:3100/sign-in](http://localhost:3100/sign-in).
 
-`/health` returns `{"status":"ok"}` when the HTTP application responds.
-`/ready` executes a database query and returns 200 when it succeeds or
-503 when it fails. Readiness does not verify application tables.
+| Demo account | Scope |
+| --- | --- |
+| `morgan.vale@example.test` | Headteacher at both fictional schools |
+| `rowan.thistle@example.test` | Head of Year 9 at Fictional Demo Academy |
+| `sasha.wren@example.test` | Teacher for Years 7 and 8 at Fictional Demo Academy |
 
-The API defaults to port 4100. Set `PORT` to override it.
+All three use `AttainlineDemo!2026`; the sign-in role cards fill the matching
+synthetic credentials.
 
-## Run the API and PostgreSQL with Docker
-
-Requires Docker Desktop or Docker Engine with Compose.
-
-From the repository root:
-
-```bash
-STUDENT_CURSOR_KEY="$(openssl rand -base64 32)" docker compose up --build -d --wait
-curl -i http://localhost:4101/health
-```
-
-The container exposes the API at http://localhost:4101.
-Local development uses port 4100.
-
-Inspect status and logs:
-
-```bash
-docker compose ps
-docker compose logs api
-```
-
-Stop and remove this project's containers and network:
-
-```bash
-docker compose down
-```
-
-The image runs compiled JavaScript as a non-root user and includes only
-production package dependencies. Its healthcheck verifies HTTP liveness.
-
-## Student directory API
-
-`GET /students/academic-years` returns `academicYearStarts`: the academic
-years in which the session's school has enrolments visible to the
-signed-in staff member, newest first, or an empty list when there are
-none.
-
-`GET /students?academicYearStart=2026&limit=25` returns the students
-enrolled in that academic year. `academicYearStart` is required. Each item
-contains `id`, `institutionStudentRef`, `firstName`, `surname`, and that
-year's `yearGroup` and `classGroup` (null when no class is recorded).
-
-Responses contain `items`, `nextCursor` and `limit`. Request the next
-page by passing the returned cursor as the `cursor` query parameter.
-A null `nextCursor` means no further page was available when queried.
-
-Page sizes range from 1 to 100. `sort` accepts only `surname-asc`
-(the default) or `surname-desc`; results are ordered by surname, then by
-ID in the same direction, so equal surnames keep a stable order. Offset
-parameters are no longer accepted.
-
-Surnames are limited to 100 characters (`VARCHAR(100)`). The accepted
-cursor length is derived from that limit, so every stored student
-produces a cursor the API will accept.
-
-Keyset pagination avoids position shifts caused by inserts and deletes
-before the cursor. It does not provide a snapshot: surname changes can
-move students across the boundary, and new rows before it appear only
-after restarting pagination.
-
-Cursors are opaque AES-256-GCM tokens, so the surname and ID they carry
-stay out of URLs, browser history and logs, and altered tokens are
-rejected. Encryption is not authorisation: every query is still scoped
-to the session's school and year groups, and a valid cursor from another
-school is rejected. Changing `STUDENT_CURSOR_KEY` invalidates
-cursors already issued.
-
-Invalid parameters and cursors return a generic 400. Query failures
-return 503.
-
-Search with `GET /students?academicYearStart=2026&q=Velmira&limit=25`.
-
-Search matches a partial first name, surname or student reference,
-case-insensitively. The trimmed term is limited to 100 characters.
-Changing the year, term or sort starts a new pagination sequence: a
-cursor is only accepted with the academic year, search and sort it was
-issued for.
-
-`GET /students/:studentId?academicYearStart=2026` returns one student's
-identity and placement for that year, with the same fields as a directory
-item. A student from another organisation, or one without an enrolment in
-that year, returns 404. Malformed IDs or years return 400.
-
-The directory page shows the newest academic year by default, with tabs
-for the others. The search field submits the term explicitly, and the
-Student column header switches between A to Z and Z to A. Pagination,
-refresh and retry keep the year, search and sort; changing any of them
-returns to the first page while keeping the others.
-
-The Refresh control re-fetches the current page in place and is disabled
-while the request runs. The Columns control shows or hides the reference,
-year group and class columns until the next full page load; searching
-submits a form and reloads the page, so it resets them. Each
-row's View action opens that row's placement for the selected year in a
-dialog, without another request; focus returns to that row's action when
-it closes.
-
-Search terms appear in URLs. This implementation is restricted to
-synthetic demo data.
-
-See [the search decision](docs/decisions/student-directory-search.md)
-for matching behaviour, pagination constraints and performance limits, and
-[the annual placement decision](docs/decisions/student-directory-annual-placement.md)
-for how the year is chosen and what placement does not cover, and
-[the directory interaction decision](docs/decisions/student-directory-interactions.md)
-for sorting, the details dialog and table state.
-
-Every response carries an `X-Request-Id` header. An incoming UUID is
-kept, so web and API log lines for one request share an ID; any other
-value is replaced rather than echoed. Failure logs record Prisma and
-PostgreSQL error codes, never messages, URLs, cursors or student data,
-because driver messages can contain hosts, file paths and row values.
-
-## Analytics API
-
-`GET /analytics/overview?academicYearStart=2026` returns the visible
-cohort's student count, assessment coverage, status distribution and
-measure summaries. `GET /analytics/rankings?academicYearStart=2026&measure=CAT4_MEAN&yearGroup=9&page=1&limit=25`
-returns a stable, paginated ranking plus the visible year groups for the
-selected academic year.
-
-Both endpoints require a session bearer token. Their repository query is
-scoped to the active organisation and, for teachers and heads of year, to
-assigned year groups. Ranking status and priority reuse the assessment
-indicator implementation used by student profiles. See
-[the analytics decision](docs/decisions/analytics-and-rankings.md) for the
-aggregation, rendering and scaling boundaries.
-Prisma reports some errors under `meta.driverAdapterError` and others,
-such as check and restrict violations, as a raw adapter error with the
-cause at the top level; the classifier reads both. Log fields accept only
-primitive values, so errors, requests and query results cannot be logged
-whole.
-
-
-Search terms, academic years, sort orders and cursors travel in page and
-API query strings, and student IDs appear in the API's details URL path.
-They can therefore appear in browser history and in any proxy or hosting
-access logs. The application's own logs record only request IDs and error
-codes. Pages are sent with `no-store`, and the web app sets a
-`no-referrer` policy. Real pupil data needs an access-log policy and a
-review of these URLs first.
-
-## Assessment results API
-
-`GET /students/<id>/assessments?academicYearStart=2026` returns, for a
-student visible to the session in that year, each measure's latest result
-sat in the year: standard age score, stanine, national percentile rank,
-raw score and its maximum where recorded, and the previous sitting of the
-same measure when there is one. It also returns `status` and `priority`
-with the scores they were based on. A student outside the session's school
-or year groups, or not enrolled that year, returns 404.
-
-See [the assessment results decision](docs/decisions/assessment-results.md)
-for the model, the status and priority definitions and what was not
-migrated.
-
-The profile link carries the directory's current query, so the list behind
-the dialog keeps its year, search, sort and page. Profile links are not
-prefetched: prefetching on hover rendered the profile and directory early,
-so one opening made six API requests instead of two.
-
-## Authentication
-
-The Express API owns accounts, sessions and authorisation. The Next.js
-server signs in on the user's behalf, keeps the session token in an
-`HttpOnly`, `Secure`, `SameSite=Lax` cookie and forwards it to the API as
-a bearer token. The browser never calls the API, and browser JavaScript
-cannot read the token.
-
-`POST /auth/sessions` takes `email` and `password` and returns a token
-and its expiry. `GET /auth/session` describes the signed-in user, active
-school, role and year groups. `PUT /auth/session/organisation` switches to
-another school where the user has an active membership and returns a new
-token. `DELETE /auth/session` signs out. Every `/students` route requires
-a valid bearer token.
-
-Every protected request looks the session up by the SHA-256 digest of its
-token and rejects it when it has expired (8 hours after sign-in), has been
-revoked or belongs to a suspended membership. School, role and year
-groups come only from that record; IDs or roles in the query string or
-body are rejected or ignored. Headteachers see the whole school. Heads of
-year and teachers see students placed in their assigned year groups for
-the selected academic year, and nothing when no year group is assigned.
-
-Five failed sign-ins for one email address within 15 minutes lock it for
-30 minutes. Wrong passwords and unknown addresses get the same response.
-
-The API refuses state-changing requests that carry browser `Origin` or
-`Sec-Fetch-Site` headers, so a page on another site cannot use it
-directly. Sign-in, sign-out and school switching run as Next.js Server
-Actions, which accept only POST and reject requests whose `Origin` does
-not match the host.
-
-See [the authentication decision](docs/decisions/authentication-and-sessions.md)
-for the alternatives considered and the limits.
-
-## Verification
+Run the standard checks with:
 
 ```bash
 pnpm --filter @attainline/web lint
-pnpm --filter @attainline/api test
 pnpm typecheck
+pnpm --filter @attainline/api test
+DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433/attainline_test" pnpm --filter @attainline/api test:integration
 pnpm build
 pnpm --filter @attainline/web test:e2e
 ```
 
-Run PostgreSQL integration tests against a migrated local database named
-`attainline_test`. They create and delete rows, so they refuse to run
-when `DATABASE_URL` points at any other database or host:
+Against an explicitly supplied running target, run the synthetic-only smoke
+journey with:
 
 ```bash
-DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433/attainline_test" pnpm --filter @attainline/api test:integration
+DEMO_BASE_URL="https://<target-host>" pnpm --filter @attainline/web test:smoke
 ```
 
-CI runs API checks against an isolated PostgreSQL service, then builds
-the apps and runs the Playwright tests in Chromium. API tests generate
-their own throwaway cursor keys, so CI needs no secret.
+The integration database must be local, named `attainline_test`, and migrated
+before the integration command runs.
 
-Next fetches the directory on the server, where browser request
-interception cannot reach. The browser tests therefore start a small
-stand-in HTTP API (`apps/web/tests/support/student-api-server.mts`) and
-switch it between populated, empty, invalid-cursor and unavailable
-responses. Both are held to the web app's response schema: the API
-integration test parses real responses with it, and a stand-in response
-that failed it would show the unavailable state and fail the populated
-browser tests.
+## Limitations
 
-That contract check imports the web app's response schema and search
-limit from the API's integration test only. API source cannot import
-outside `apps/api/src` (`rootDir` in its `tsconfig.json`), and the API's
-build and Docker image contain no web code.
+- Attainline is a synthetic demonstration and is not authorised to process real student data. Search terms and student IDs appear in URLs and may be retained by browser history or infrastructure access logs.
+- Substring search uses PostgreSQL without a trigram index; no search-latency or scale claim has been established.
+- Global ranking work is bounded by the visible school cohort, not by the page size. Database-side ranking is the next scaling boundary if measurements justify it.
+- OAuth, self-service accounts, password reset, MFA, audit logs, attendance, notifications, QLA and external calendar integrations are outside this build.
 
-The stand-in API keeps one global scenario and request log, so Playwright
-runs with a single worker. Running tests in parallel would need
-per-test isolation in the stand-in first.
-
-For local Playwright Chromium installation:
-
-```bash
-pnpm --filter @attainline/web exec playwright install --with-deps chromium
-```
-
-Deployment workflows are not configured.
+Detailed records live in [`docs/decisions`](docs/decisions), including annual
+placements, directory interactions, assessment modelling, authentication and
+analytics boundaries.
