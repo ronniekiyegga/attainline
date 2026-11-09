@@ -5,21 +5,26 @@ import {
   DirectoryLink,
   directoryHref,
   toolbarControlClass,
+  type DirectoryLocation,
 } from "./directory-link";
+import { RefreshButton } from "./refresh-button";
 import {
   getAcademicYears,
   getStudents,
   type StudentPageResult,
 } from "./student.api";
+import { ColumnToggle } from "./student-columns";
 import {
   DirectoryUnavailable,
   InvalidAcademicYear,
   InvalidCursor,
   InvalidSearch,
+  InvalidSort,
   NoEnrolments,
 } from "./student-directory-states";
 import { StudentSearch } from "./student-search";
 import { studentSearchSchema } from "./student-search.schema";
+import { studentSortParamSchema } from "./student-sort";
 import { StudentTable } from "./student-table";
 
 type StudentDirectoryProps = {
@@ -36,15 +41,21 @@ export async function StudentDirectory({ searchParams }: StudentDirectoryProps) 
 
   const search = parsedSearch.data || undefined;
   const requestedYear = academicYearParamSchema.safeParse(parameters.year);
+  const parsedSort = studentSortParamSchema.safeParse(parameters.sort);
 
   if (!requestedYear.success) {
-    return <InvalidAcademicYear search={search} />;
+    return <InvalidAcademicYear search={search} sort={parsedSort.data} />;
   }
 
+  if (!parsedSort.success) {
+    return <InvalidSort year={requestedYear.data} search={search} />;
+  }
+
+  const sort = parsedSort.data;
   const { cursor } = parameters;
 
   if (cursor !== undefined && (typeof cursor !== "string" || cursor === "")) {
-    return <InvalidCursor year={requestedYear.data} search={search} />;
+    return <InvalidCursor year={requestedYear.data} search={search} sort={sort} />;
   }
 
   const years = await getAcademicYears();
@@ -54,6 +65,7 @@ export async function StudentDirectory({ searchParams }: StudentDirectoryProps) 
       <DirectoryUnavailable
         year={requestedYear.data}
         search={search}
+        sort={sort}
         cursor={cursor}
       />
     );
@@ -68,52 +80,62 @@ export async function StudentDirectory({ searchParams }: StudentDirectoryProps) 
   const year = requestedYear.data ?? currentYear;
 
   if (!years.data.includes(year)) {
-    return <InvalidAcademicYear search={search} />;
+    return <InvalidAcademicYear search={search} sort={sort} />;
   }
 
-  const result = await getStudents({ academicYearStart: year, cursor, search });
+  const result = await getStudents({ academicYearStart: year, sort, cursor, search });
 
   return (
     <div className="flex w-full flex-col justify-start gap-1 space-y-4">
       <div className="flex w-full flex-col items-stretch justify-between gap-2 md:flex-row md:items-center">
-        <AcademicYearTabs years={years.data} selectedYear={year} search={search} />
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 md:w-auto md:flex-nowrap">
-          <StudentSearch search={search ?? ""} year={year} />
+        <AcademicYearTabs
+          years={years.data}
+          selectedYear={year}
+          search={search}
+          sort={sort}
+        />
+        <StudentSearch search={search ?? ""} year={year} sort={sort}>
           {search && (
-            <Link href={directoryHref({ year })} className={toolbarControlClass}>
+            <Link href={directoryHref({ year, sort })} className={toolbarControlClass}>
               Clear search
             </Link>
           )}
-        </div>
+          <RefreshButton />
+          <ColumnToggle />
+        </StudentSearch>
       </div>
 
-      <DirectoryResult result={result} year={year} cursor={cursor} search={search} />
+      <DirectoryResult
+        result={result}
+        location={{ year, search, sort }}
+        cursor={cursor}
+      />
     </div>
   );
 }
 
 type DirectoryResultProps = {
   result: StudentPageResult;
-  year: number;
+  location: DirectoryLocation & { year: number };
   cursor?: string;
-  search?: string;
 };
 
-function DirectoryResult({ result, year, cursor, search }: DirectoryResultProps) {
+function DirectoryResult({ result, location, cursor }: DirectoryResultProps) {
   if (result.status === "invalid-cursor") {
-    return <InvalidCursor year={year} search={search} />;
+    return <InvalidCursor {...location} />;
   }
 
   if (result.status === "unavailable") {
-    return <DirectoryUnavailable year={year} search={search} cursor={cursor} />;
+    return <DirectoryUnavailable {...location} cursor={cursor} />;
   }
 
   const { items, nextCursor } = result.data;
-  const yearLabel = formatAcademicYear(year);
+  const yearLabel = formatAcademicYear(location.year);
+  const order = location.sort === "surname-desc" ? "Z to A" : "A to Z";
 
   const emptyMessage = cursor
     ? "No students on this page. Return to the first page."
-    : search
+    : location.search
       ? `No students in ${yearLabel} match this search.`
       : `No students are enrolled in ${yearLabel}.`;
 
@@ -121,11 +143,12 @@ function DirectoryResult({ result, year, cursor, search }: DirectoryResultProps)
     <div className="flex flex-col gap-4">
       <StudentTable
         students={items}
-        caption={`Students enrolled in ${yearLabel}, ordered by surname`}
+        caption={`Students enrolled in ${yearLabel}, ordered by surname ${order}`}
         emptyMessage={emptyMessage}
+        location={location}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-b-lg py-2">
+      <div className="flex min-h-[3.25rem] flex-wrap items-center justify-between gap-2 py-2">
         <p className="text-xs text-muted-foreground">
           {items.length > 0 &&
             `Showing ${items.length} ${items.length === 1 ? "student" : "students"} · ${yearLabel}`}
@@ -135,13 +158,13 @@ function DirectoryResult({ result, year, cursor, search }: DirectoryResultProps)
           className="flex items-center gap-2"
         >
           {cursor && (
-            <DirectoryLink href={directoryHref({ year, search })}>
+            <DirectoryLink href={directoryHref(location)}>
               First page
             </DirectoryLink>
           )}
           {nextCursor && (
             <DirectoryLink
-              href={directoryHref({ year, search, cursor: nextCursor })}
+              href={directoryHref({ ...location, cursor: nextCursor })}
               rel="next"
             >
               Next page

@@ -4,9 +4,12 @@ import { connection } from "next/server";
 import { z } from "zod";
 import {
   academicYearsSchema,
+  studentDetailsSchema,
   studentPageSchema,
+  type StudentDetails,
   type StudentPage,
 } from "./student-page.schema";
+import type { StudentSort } from "./student-sort";
 
 const PAGE_SIZE = "25";
 
@@ -14,11 +17,16 @@ const REQUEST_TIMEOUT_MS = 25_000;
 
 type ApiResult<T> =
   | { status: "success"; data: T }
-  | { status: "rejected" }
+  | { status: "expected-error"; httpStatus: number }
   | { status: "unavailable" };
 
 export type AcademicYearsResult =
   | { status: "success"; data: number[] }
+  | { status: "unavailable" };
+
+export type StudentDetailsResult =
+  | { status: "success"; data: StudentDetails }
+  | { status: "not-found" }
   | { status: "unavailable" };
 
 export type StudentPageResult =
@@ -64,7 +72,7 @@ async function requestStudentApi<T>(
   path: string,
   parameters: Record<string, string | undefined>,
   schema: z.ZodType<T>,
-  { expectRejection }: { expectRejection: boolean },
+  expectedErrors: number[] = [],
 ): Promise<ApiResult<T>> {
   await connection();
 
@@ -106,8 +114,8 @@ async function requestStudentApi<T>(
     return { status: "unavailable" };
   }
 
-  if (response.status === 400 && expectRejection) {
-    return { status: "rejected" };
+  if (expectedErrors.includes(response.status)) {
+    return { status: "expected-error", httpStatus: response.status };
   }
 
   if (!response.ok) {
@@ -130,7 +138,6 @@ export async function getAcademicYears(): Promise<AcademicYearsResult> {
     "students/academic-years",
     {},
     academicYearsSchema,
-    { expectRejection: false },
   );
 
   return result.status === "success"
@@ -140,12 +147,14 @@ export async function getAcademicYears(): Promise<AcademicYearsResult> {
 
 type StudentPageQuery = {
   academicYearStart: number;
+  sort: StudentSort;
   cursor?: string;
   search?: string;
 };
 
 export async function getStudents({
   academicYearStart,
+  sort,
   cursor,
   search,
 }: StudentPageQuery): Promise<StudentPageResult> {
@@ -153,13 +162,33 @@ export async function getStudents({
     "students",
     {
       academicYearStart: String(academicYearStart),
+      sort,
       limit: PAGE_SIZE,
       q: search,
       cursor,
     },
     studentPageSchema,
-    { expectRejection: Boolean(cursor) },
+    cursor ? [400] : [],
   );
 
-  return result.status === "rejected" ? { status: "invalid-cursor" } : result;
+  return result.status === "expected-error" ? { status: "invalid-cursor" } : result;
+}
+
+type StudentDetailsQuery = {
+  studentId: string;
+  academicYearStart: number;
+};
+
+export async function getStudentDetails({
+  studentId,
+  academicYearStart,
+}: StudentDetailsQuery): Promise<StudentDetailsResult> {
+  const result = await requestStudentApi(
+    `students/${encodeURIComponent(studentId)}`,
+    { academicYearStart: String(academicYearStart) },
+    studentDetailsSchema,
+    [404],
+  );
+
+  return result.status === "expected-error" ? { status: "not-found" } : result;
 }

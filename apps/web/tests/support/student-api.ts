@@ -3,11 +3,24 @@ import { expect, type APIRequestContext } from "@playwright/test";
 export const studentApiPort = 4199;
 export const studentApiUrl = `http://127.0.0.1:${studentApiPort}`;
 
-type Scenario = "populated" | "empty" | "no-enrolments" | "unavailable";
+type Scenario =
+  | "populated"
+  | "empty"
+  | "no-enrolments"
+  | "unavailable"
+  | "list-unavailable"
+  | "details-unavailable"
+  | "details-extra-fields";
+
+type ScenarioOptions = {
+  listDelay?: number;
+  slowStudents?: string[];
+};
 
 type ReceivedRequest = {
   path: string;
   academicYearStart: string | null;
+  sort: string | null;
   limit: string | null;
   q: string | null;
   cursor: string | null;
@@ -17,8 +30,16 @@ type ReceivedRequest = {
 export async function useScenario(
   request: APIRequestContext,
   scenario: Scenario,
+  { listDelay = 0, slowStudents = [] }: ScenarioOptions = {},
 ) {
-  const response = await request.put(`${studentApiUrl}/__scenario/${scenario}`);
+  const options = new URLSearchParams({ listDelay: String(listDelay) });
+  for (const id of slowStudents) {
+    options.append("slowStudent", id);
+  }
+
+  const response = await request.put(
+    `${studentApiUrl}/__scenario/${scenario}?${options}`,
+  );
   expect(response.status()).toBe(204);
 }
 

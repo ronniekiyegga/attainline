@@ -52,8 +52,14 @@ and `DEMO_ORGANISATION_ID` there, and set `STUDENT_CURSOR_KEY` to the
 output of `openssl rand -base64 32`. The API refuses to start without a
 valid key.
 
-The web app reads the API location from `ATTAINLINE_API_URL`, for example
-`ATTAINLINE_API_URL=http://localhost:4100` in `apps/web/.env.local`.
+Point `DATABASE_URL` at the local Docker database below, or at another
+database that holds only independently invented records. The API has no
+sign-in, so it serves the configured organisation's students to anyone
+who can reach it.
+
+The web app reads the API location from `ATTAINLINE_API_URL`. Copy
+`apps/web/.env.example` to `apps/web/.env.local`, which sets
+`ATTAINLINE_API_URL=http://localhost:4100`.
 A path in that URL is kept as a prefix, so `http://host/api` requests
 `http://host/api/students`; any query string or fragment is ignored.
 
@@ -71,7 +77,8 @@ pnpm --filter @attainline/api exec prisma migrate deploy
 
 Migrations create the schema; they do not load data. To fill the local
 Docker database with invented demo students (65 across two fictional
-organisations, enough for three directory pages):
+organisations, enough for three directory pages) and their placements for
+2025/26 and 2026/27:
 
 ```bash
 SEED_DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433/attainline" pnpm --filter @attainline/api seed:demo
@@ -79,7 +86,12 @@ SEED_DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433
 
 The seed refuses any target except the local `attainline` database. It
 only adds missing rows, never updates or deletes existing ones, so it is
-safe to rerun. Every name and `DEMO-` reference in it is invented.
+safe to rerun. Each placement is derived from the student's `DEMO-`
+reference, never from row order. Students in Year 7 in 2026/27 have no
+2025/26 enrolment, some 2025/26 placements have no class, and surnames
+repeat. When an existing enrolment differs from the demo placement, the
+seed leaves it unchanged and reports how many differ. Every name and
+`DEMO-` reference in it is invented.
 Integration tests create their own fixtures and do not use it.
 
 Start each application in a separate terminal:
@@ -147,8 +159,10 @@ Responses contain `items`, `nextCursor` and `limit`. Request the next
 page by passing the returned cursor as the `cursor` query parameter.
 A null `nextCursor` means no further page was available when queried.
 
-Page sizes range from 1 to 100. Results are ordered by surname, then ID.
-Offset parameters are no longer accepted.
+Page sizes range from 1 to 100. `sort` accepts only `surname-asc`
+(the default) or `surname-desc`; results are ordered by surname, then by
+ID in the same direction, so equal surnames keep a stable order. Offset
+parameters are no longer accepted.
 
 Surnames are limited to 100 characters (`VARCHAR(100)`). The accepted
 cursor length is derived from that limit, so every stored student
@@ -173,13 +187,27 @@ Search with `GET /students?academicYearStart=2026&q=Velmira&limit=25`.
 
 Search matches a partial first name, surname or student reference,
 case-insensitively. The trimmed term is limited to 100 characters.
-Changing the year or the term starts a new pagination sequence: a cursor
-is only accepted with the academic year and search it was issued for.
+Changing the year, term or sort starts a new pagination sequence: a
+cursor is only accepted with the academic year, search and sort it was
+issued for.
+
+`GET /students/:studentId?academicYearStart=2026` returns one student's
+identity and placement for that year, with the same fields as a directory
+item. A student from another organisation, or one without an enrolment in
+that year, returns 404. Malformed IDs or years return 400.
 
 The directory page shows the newest academic year by default, with tabs
-for the others. The search field submits the term explicitly. Pagination,
-refresh and retry keep both the year and the search; choosing another year
-keeps the search, and clearing the search keeps the year.
+for the others. The search field submits the term explicitly, and the
+Student column header switches between A to Z and Z to A. Pagination,
+refresh and retry keep the year, search and sort; changing any of them
+returns to the first page while keeping the others.
+
+The Refresh control re-fetches the current page in place and is disabled
+while the request runs. The Columns control shows or hides the reference,
+year group and class columns until the next full page load; searching
+submits a form and reloads the page, so it resets them. Each
+row's View action opens the student's details for the selected year in a
+dialog; focus returns to that row's action when it closes.
 
 Search terms appear in URLs. This implementation is restricted to
 synthetic demo data.
@@ -187,7 +215,9 @@ synthetic demo data.
 See [the search decision](docs/decisions/student-directory-search.md)
 for matching behaviour, pagination constraints and performance limits, and
 [the annual placement decision](docs/decisions/student-directory-annual-placement.md)
-for how the year is chosen and what placement does not cover.
+for how the year is chosen and what placement does not cover, and
+[the directory interaction decision](docs/decisions/student-directory-interactions.md)
+for sorting, details loading and table state.
 
 Every response carries an `X-Request-Id` header. An incoming UUID is
 kept, so web and API log lines for one request share an ID. Failure
@@ -196,6 +226,15 @@ cursors or student data.
 
 The endpoint has no authentication and is intended only for synthetic
 demo data. Organisation scoping is not user authorisation.
+
+Search terms, academic years, sort orders and cursors travel in page and
+API query strings, and student IDs appear in the details URL path
+(`/api/students/<id>?year=` in the web app). They can therefore appear in
+browser history and in any proxy or hosting access logs. The application's
+own logs record only request IDs and error codes. Pages and the details
+route are sent with `no-store`, and the web app sets a `no-referrer`
+policy. Real pupil data needs authentication, an access-log policy and a
+review of these URLs first.
 
 ## Verification
 

@@ -1,34 +1,46 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { ChevronDown, ChevronUp } from "lucide-react";
+import Link from "next/link";
+import { useRef, useState, type ReactNode } from "react";
+import { directoryHref, type DirectoryLocation } from "./directory-link";
+import { optionalColumns, useStudentColumns } from "./student-columns";
+import {
+  StudentDetailsDialog,
+  type SelectedStudent,
+} from "./student-details-dialog";
 import type { StudentPage } from "./student-page.schema";
+import { DEFAULT_STUDENT_SORT, type StudentSort } from "./student-sort";
 
-const columns = ["Student", "Student reference", "Year group", "Class"];
+type Student = StudentPage["items"][number];
 
-function TableFrame({ caption, children }: { caption: string; children: ReactNode }) {
+const headerClass =
+  "h-12 whitespace-nowrap py-4 text-left align-middle text-slate-600";
+const headerLabelClass = "text-xs font-semibold";
+const cellClass = "px-4 py-2 align-middle text-xs text-muted-foreground";
+
+function TableFrame({
+  caption,
+  header,
+  children,
+}: {
+  caption: string;
+  header: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <div className="rounded-lg bg-white shadow-sm">
+    <div className="rounded-lg bg-white shadow-xs">
       <div className="scrollbar-thin relative w-full overflow-x-auto">
         <table className="w-full min-w-[36rem] caption-bottom text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead
-            className="sticky top-0 z-20 text-slate-400"
+            className="sticky top-0 z-20"
             style={{
               background:
                 "linear-gradient(180deg, #FBFBFB 68.72%, #F4F7FF 130.66%)",
             }}
           >
-            <tr className="border-b">
-              {columns.map((column, index) => (
-                <th
-                  key={column}
-                  scope="col"
-                  className={`h-12 py-4 text-left align-middle text-xs font-semibold text-slate-600 ${
-                    index === 0 ? "rounded-l-sm pl-8 pr-4" : "px-4"
-                  } ${index === columns.length - 1 ? "rounded-r-sm" : ""}`}
-                >
-                  {column}
-                </th>
-              ))}
-            </tr>
+            <tr className="border-b">{header}</tr>
           </thead>
           <tbody className="[&_tr:last-child]:border-0">{children}</tbody>
         </table>
@@ -37,64 +49,182 @@ function TableFrame({ caption, children }: { caption: string; children: ReactNod
   );
 }
 
-const cellClass = "px-4 py-2 align-middle text-xs text-muted-foreground";
+function displayName(student: Student) {
+  return student.firstName
+    ? `${student.firstName} ${student.surname}`
+    : student.surname;
+}
 
-type StudentTableProps = {
-  students: StudentPage["items"];
-  caption: string;
-  emptyMessage: string;
-};
+function initials(student: Student) {
+  return [student.firstName, student.surname]
+    .flatMap((part) => (part ? [part[0]] : []))
+    .join("")
+    .toUpperCase();
+}
 
-export function StudentTable({ students, caption, emptyMessage }: StudentTableProps) {
+function SortableStudentHeader({ location }: { location: DirectoryLocation }) {
+  const sort: StudentSort = location.sort ?? DEFAULT_STUDENT_SORT;
+  const descending = sort === "surname-desc";
+  const Icon = descending ? ChevronDown : ChevronUp;
+
   return (
-    <TableFrame caption={caption}>
-      {students.length === 0 ? (
-        <tr>
-          <td
-            colSpan={columns.length}
-            className="h-24 text-center text-xs text-muted-foreground"
-          >
-            {emptyMessage}
-          </td>
-        </tr>
-      ) : (
-        students.map((student) => (
-          <tr
-            key={student.id}
-            className="hover-gradient relative h-16 border-b border-l-2 border-l-transparent transition-all duration-200 ease-in-out"
-          >
-            <th
-              scope="row"
-              className="max-w-56 truncate py-2 pl-8 pr-4 text-left align-middle text-xs font-normal text-muted-foreground"
-            >
-              {student.firstName
-                ? `${student.firstName} ${student.surname}`
-                : student.surname}
-            </th>
-            <td className={`${cellClass} break-all`}>
-              {student.institutionStudentRef}
-            </td>
-            <td className={`${cellClass} whitespace-nowrap`}>
-              Year {student.yearGroup}
-            </td>
-            <td className={`${cellClass} whitespace-nowrap`}>
-              {student.classGroup ?? (
-                <span className="text-slate-400">Not recorded</span>
-              )}
-            </td>
-          </tr>
-        ))
-      )}
-    </TableFrame>
+    <th
+      scope="col"
+      aria-sort={descending ? "descending" : "ascending"}
+      className={`${headerClass} pl-8 pr-4`}
+    >
+      <Link
+        href={directoryHref({
+          ...location,
+          cursor: undefined,
+          sort: descending ? "surname-asc" : "surname-desc",
+        })}
+        className={`${headerLabelClass} inline-flex items-center gap-2 rounded-md hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+      >
+        Student
+        <Icon size={14} className="ml-1 opacity-70" aria-hidden="true" />
+        <span className="sr-only">
+          {descending
+            ? ", sorted by surname Z to A. Sort A to Z"
+            : ", sorted by surname A to Z. Sort Z to A"}
+        </span>
+      </Link>
+    </th>
   );
 }
 
-const skeletonWidths = ["w-28", "w-20", "w-12", "w-10"];
+type StudentTableProps = {
+  students: Student[];
+  caption: string;
+  emptyMessage: string;
+  location: DirectoryLocation & { year: number };
+};
+
+export function StudentTable({
+  students,
+  caption,
+  emptyMessage,
+  location,
+}: StudentTableProps) {
+  const { isVisible } = useStudentColumns();
+  const [selected, setSelected] = useState<SelectedStudent | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const selectionCount = useRef(0);
+  const visibleHeaders = optionalColumns.filter(({ id }) => isVisible(id));
+
+  return (
+    <>
+      <TableFrame
+        caption={caption}
+        header={
+          <>
+            <SortableStudentHeader location={location} />
+            {visibleHeaders.map(({ id, label }) => (
+              <th key={id} scope="col" className={`${headerClass} px-4`}>
+                <span className={headerLabelClass}>{label}</span>
+              </th>
+            ))}
+            <th scope="col" className={`${headerClass} px-4`}>
+              <span className="sr-only">Details</span>
+            </th>
+          </>
+        }
+      >
+        {students.length === 0 ? (
+          <tr>
+            <td
+              colSpan={visibleHeaders.length + 2}
+              className="h-24 text-center text-xs text-muted-foreground"
+            >
+              {emptyMessage}
+            </td>
+          </tr>
+        ) : (
+          students.map((student) => (
+            <tr
+              key={student.id}
+              className="hover-gradient relative h-16 border-b border-l-2 border-l-transparent transition-all duration-200 ease-in-out"
+            >
+              <th
+                scope="row"
+                className="whitespace-nowrap py-2 pl-8 pr-4 text-left align-middle text-xs font-normal text-muted-foreground"
+              >
+                {displayName(student)}
+              </th>
+              {isVisible("reference") && (
+                <td className={`${cellClass} break-all`}>
+                  {student.institutionStudentRef}
+                </td>
+              )}
+              {isVisible("yearGroup") && (
+                <td className={`${cellClass} whitespace-nowrap`}>
+                  Year {student.yearGroup}
+                </td>
+              )}
+              {isVisible("classGroup") && (
+                <td className={`${cellClass} whitespace-nowrap`}>
+                  {student.classGroup ?? (
+                    <span className="text-slate-600">Not recorded</span>
+                  )}
+                </td>
+              )}
+              <td className="px-4 py-2 text-right align-middle">
+                <button
+                  type="button"
+                  aria-label={`View details for ${displayName(student)}`}
+                  onClick={(event) => {
+                    openerRef.current = event.currentTarget;
+                    selectionCount.current += 1;
+                    setSelected({
+                      selection: selectionCount.current,
+                      id: student.id,
+                      name: displayName(student),
+                      initials: initials(student),
+                    });
+                  }}
+                  className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-zinc-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  View
+                </button>
+              </td>
+            </tr>
+          ))
+        )}
+      </TableFrame>
+
+      <StudentDetailsDialog
+        student={selected}
+        year={location.year}
+        returnFocusTo={openerRef}
+        onClose={() => setSelected(null)}
+      />
+    </>
+  );
+}
+
+const skeletonWidths = ["w-28", "w-20", "w-12", "w-10", "w-8"];
 
 export function StudentTableSkeleton() {
   return (
     <div role="status" aria-label="Loading students">
-      <TableFrame caption="Loading students">
+      <TableFrame
+        caption="Loading students"
+        header={
+          <>
+            <th scope="col" className={`${headerClass} pl-8 pr-4`}>
+              <span className={headerLabelClass}>Student</span>
+            </th>
+            {optionalColumns.map(({ id, label }) => (
+              <th key={id} scope="col" className={`${headerClass} px-4`}>
+                <span className={headerLabelClass}>{label}</span>
+              </th>
+            ))}
+            <th scope="col" className={`${headerClass} px-4`}>
+              <span className="sr-only">Details</span>
+            </th>
+          </>
+        }
+      >
         {Array.from({ length: 10 }, (_, row) => (
           <tr
             key={row}
@@ -106,7 +236,7 @@ export function StudentTableSkeleton() {
                 key={width}
                 className={`py-2 align-middle ${index === 0 ? "pl-8 pr-4" : "px-4"}`}
               >
-                <div className={`h-4 ${width} animate-pulse rounded-md bg-gray-100`} />
+                <div className={`h-4 ${width} animate-pulse rounded-md bg-slate-100 motion-reduce:animate-none`} />
               </td>
             ))}
           </tr>

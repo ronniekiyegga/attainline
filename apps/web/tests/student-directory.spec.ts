@@ -33,17 +33,18 @@ test.describe("student directory", () => {
     await expect(page.getByText("Showing 2 students · 2026/27")).toBeVisible();
     await expect(directoryRows(page)).toHaveText(["Avery Ashgrove", "Brackenridge"]);
     await expect(page.getByRole("columnheader")).toHaveText([
-      "Student",
+      /^Student, sorted by surname A to Z/,
       "Student reference",
       "Year group",
       "Class",
+      "Details",
     ]);
     await expect(
       page.getByRole("row", { name: /Avery Ashgrove/ }).getByRole("cell"),
-    ).toHaveText(["DEMO-SYN-001", "Year 7", "7A"]);
+    ).toHaveText(["DEMO-SYN-001", "Year 7", "7A", "View"]);
     await expect(
       page.getByRole("row", { name: /Brackenridge/ }).getByRole("cell"),
-    ).toHaveText(["DEMO-SYN-002", "Year 7", "Not recorded"]);
+    ).toHaveText(["DEMO-SYN-002", "Year 7", "Not recorded", "View"]);
     await expect(page.getByRole("link", { name: "First page" })).toHaveCount(0);
 
     const requests = await receivedRequests(request);

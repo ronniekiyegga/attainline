@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { StudentDirectory } from "@/features/students/student-directory";
+import { StudentColumnsProvider } from "@/features/students/student-columns";
 import { StudentTableSkeleton } from "@/features/students/student-table";
 
 type HomeProps = {
@@ -24,9 +25,11 @@ export default function Home({ searchParams }: HomeProps) {
         </p>
       </header>
 
-      <Suspense fallback={<StudentTableSkeleton />}>
-        <StudentDirectory searchParams={searchParams} />
-      </Suspense>
+      <StudentColumnsProvider>
+        <Suspense fallback={<StudentTableSkeleton />}>
+          <StudentDirectory searchParams={searchParams} />
+        </Suspense>
+      </StudentColumnsProvider>
     </div>
   );
 }

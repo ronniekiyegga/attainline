@@ -156,3 +156,41 @@ tests assert the page size and that the web app sends a request ID.
 Finding: generating the request ID with `randomUUID()` made Next report
 a prerendering error under `cacheComponents`. The directory fetch now
 calls `connection()` first, marking it as request-time work.
+
+## 2026-11-09: Directory interactions and student details
+
+Added an allowlisted surname sort to the Express contract and encrypted
+cursor payload. Both surname and ID reverse together, which preserves a stable
+keyset order for repeated surnames. Added a tenant-and-year-constrained detail
+lookup that returns the same six fields as a directory row.
+
+The browser keeps filters and pagination in the URL, while optional-column
+visibility remains local presentation state. Refresh re-renders the current
+server route without discarding that state. Student details load through a
+Next.js route handler so the upstream API address stays server-only; the proxy
+validates and strips its response before returning it to the browser. Detail
+requests are keyed by selection and aborted on change, preventing an older
+response from replacing the current student.
+
+The private reference used text colours below WCAG AA contrast. Attainline
+keeps its gradient treatment but uses a darker card and lighter labels; the
+worst measured pair is 5.16:1. Refresh and loading animations stop under
+reduced-motion preferences.
+
+Running the constraint suite against local PostgreSQL 18 exposed a newer
+Prisma adapter shape: wrapped foreign-key errors carry SQLSTATE in
+`originalCode`. The safe classifier now accepts `code` or `originalCode`
+without reading/logging the accompanying database message. The delete
+restriction reports Prisma `P2003`, adapter kind
+`ForeignKeyConstraintViolation` and PostgreSQL `23503`; the integration test
+asserts all three.
+
+### Verification
+
+- API unit suite: 36 tests passed.
+- Frontend lint, workspace typecheck and both production builds passed.
+- Playwright: 46 tests passed across desktop and phone layouts, keyboard and
+  focus flows, loading/error/retry states, response races, reduced motion and
+  presentation checks.
+- PostgreSQL integration suite: 16 tests passed against an isolated local
+  `attainline_test` database after applying both migrations.
