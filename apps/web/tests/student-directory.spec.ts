@@ -65,6 +65,17 @@ test.describe("student directory", () => {
     }
   });
 
+  test("requests a linked year's students without waiting for the year list", async ({
+    page,
+    request,
+  }) => {
+    await useScenario(request, "populated", { holdYearsForList: true });
+    await page.goto("/?year=2025");
+
+    await expect(directoryRows(page)).toHaveText(["Dorian Elmscott"]);
+    await expect(yearTab(page, "2025/26")).toHaveAttribute("aria-current", "page");
+  });
+
   test("pages forward client-side, survives refresh and returns to the start", async ({
     page,
     request,
@@ -215,7 +226,7 @@ test.describe("student directory", () => {
     await expect(
       page.getByRole("heading", { name: "This academic year isn’t available" }),
     ).toBeVisible();
-    expect(await studentListRequests(request)).toEqual([]);
+    await expect(page.getByRole("table")).toHaveCount(0);
 
     await page.getByRole("link", { name: "Back to latest year" }).click();
     await expect(page).toHaveURL("/?q=Velmira");

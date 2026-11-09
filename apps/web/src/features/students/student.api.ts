@@ -4,9 +4,7 @@ import { connection } from "next/server";
 import { z } from "zod";
 import {
   academicYearsSchema,
-  studentDetailsSchema,
   studentPageSchema,
-  type StudentDetails,
   type StudentPage,
 } from "./student-page.schema";
 import type { StudentSort } from "./student-sort";
@@ -22,11 +20,6 @@ type ApiResult<T> =
 
 export type AcademicYearsResult =
   | { status: "success"; data: number[] }
-  | { status: "unavailable" };
-
-export type StudentDetailsResult =
-  | { status: "success"; data: StudentDetails }
-  | { status: "not-found" }
   | { status: "unavailable" };
 
 export type StudentPageResult =
@@ -172,23 +165,4 @@ export async function getStudents({
   );
 
   return result.status === "expected-error" ? { status: "invalid-cursor" } : result;
-}
-
-type StudentDetailsQuery = {
-  studentId: string;
-  academicYearStart: number;
-};
-
-export async function getStudentDetails({
-  studentId,
-  academicYearStart,
-}: StudentDetailsQuery): Promise<StudentDetailsResult> {
-  const result = await requestStudentApi(
-    `students/${encodeURIComponent(studentId)}`,
-    { academicYearStart: String(academicYearStart) },
-    studentDetailsSchema,
-    [404],
-  );
-
-  return result.status === "expected-error" ? { status: "not-found" } : result;
 }

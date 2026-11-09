@@ -109,7 +109,6 @@ export function StudentTable({
   const { isVisible } = useStudentColumns();
   const [selected, setSelected] = useState<SelectedStudent | null>(null);
   const openerRef = useRef<HTMLButtonElement | null>(null);
-  const selectionCount = useRef(0);
   const visibleHeaders = optionalColumns.filter(({ id }) => isVisible(id));
 
   return (
@@ -174,10 +173,8 @@ export function StudentTable({
                   aria-label={`View details for ${displayName(student)}`}
                   onClick={(event) => {
                     openerRef.current = event.currentTarget;
-                    selectionCount.current += 1;
                     setSelected({
-                      selection: selectionCount.current,
-                      id: student.id,
+                      details: student,
                       name: displayName(student),
                       initials: initials(student),
                     });

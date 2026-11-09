@@ -1,46 +1,15 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useState, type RefObject } from "react";
+import type { RefObject } from "react";
 import { formatAcademicYear } from "./academic-year";
-import type { StudentDetailsResult as DetailsResult } from "./student.api";
-import { studentDetailsSchema } from "./student-page.schema";
+import type { StudentDetails } from "./student-page.schema";
 
 export type SelectedStudent = {
-  selection: number;
-  id: string;
+  details: StudentDetails;
   name: string;
   initials: string;
 };
-
-async function fetchStudentDetails(
-  studentId: string,
-  year: number,
-  signal: AbortSignal,
-): Promise<DetailsResult> {
-  try {
-    const response = await fetch(
-      `/api/students/${encodeURIComponent(studentId)}?year=${year}`,
-      { cache: "no-store", signal },
-    );
-
-    if (response.status === 404) {
-      return { status: "not-found" };
-    }
-
-    if (!response.ok) {
-      return { status: "unavailable" };
-    }
-
-    const details = studentDetailsSchema.safeParse(await response.json());
-
-    return details.success && details.data.id === studentId
-      ? { status: "success", data: details.data }
-      : { status: "unavailable" };
-  } catch {
-    return { status: "unavailable" };
-  }
-}
 
 type StudentDetailsDialogProps = {
   student: SelectedStudent | null;
@@ -55,31 +24,6 @@ export function StudentDetailsDialog({
   returnFocusTo,
   onClose,
 }: StudentDetailsDialogProps) {
-  const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ key: string } & DetailsResult>();
-  const studentId = student?.id;
-  const selection = student?.selection;
-  const requestKey = studentId && `${selection}:${studentId}:${year}:${attempt}`;
-
-  useEffect(() => {
-    if (!studentId) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const key = `${selection}:${studentId}:${year}:${attempt}`;
-
-    void fetchStudentDetails(studentId, year, controller.signal).then((details) => {
-      if (!controller.signal.aborted) {
-        setResult({ key, ...details });
-      }
-    });
-
-    return () => controller.abort();
-  }, [selection, studentId, year, attempt]);
-
-  const details = result?.key === requestKey ? result : undefined;
-
   return (
     <Dialog.Root open={student !== null} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
@@ -128,11 +72,7 @@ export function StudentDetailsDialog({
                       Placement for {formatAcademicYear(year)}
                     </Dialog.Description>
                     <div className="my-2 h-px w-full bg-[#6d6f75]" />
-                    <DetailsBody
-                      details={details}
-                      year={year}
-                      onRetry={() => setAttempt((count) => count + 1)}
-                    />
+                    {student && <PlacementList details={student.details} />}
                   </div>
                 </div>
               </div>
@@ -144,47 +84,8 @@ export function StudentDetailsDialog({
   );
 }
 
-type DetailsBodyProps = {
-  details: DetailsResult | undefined;
-  year: number;
-  onRetry: () => void;
-};
-
-function DetailsBody({ details, year, onRetry }: DetailsBodyProps) {
-  if (!details) {
-    return (
-      <p role="status" className="text-[11px] text-gray-100">
-        Loading details…
-      </p>
-    );
-  }
-
-  if (details.status === "not-found") {
-    return (
-      <p className="text-[11px] text-gray-100">
-        This student is not enrolled in {formatAcademicYear(year)}.
-      </p>
-    );
-  }
-
-  if (details.status === "unavailable") {
-    return (
-      <div className="space-y-2">
-        <p className="text-[11px] text-gray-100">
-          Student details are temporarily unavailable.
-        </p>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  const { institutionStudentRef, yearGroup, classGroup } = details.data;
+function PlacementList({ details }: { details: StudentDetails }) {
+  const { institutionStudentRef, yearGroup, classGroup } = details;
 
   return (
     <dl className="space-y-2 text-[11px]">

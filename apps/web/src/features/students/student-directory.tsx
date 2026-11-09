@@ -58,7 +58,12 @@ export async function StudentDirectory({ searchParams }: StudentDirectoryProps) 
     return <InvalidCursor year={requestedYear.data} search={search} sort={sort} />;
   }
 
-  const years = await getAcademicYears();
+  const [years, requestedYearPage] = await Promise.all([
+    getAcademicYears(),
+    requestedYear.data === undefined
+      ? undefined
+      : getStudents({ academicYearStart: requestedYear.data, sort, cursor, search }),
+  ]);
 
   if (years.status === "unavailable") {
     return (
@@ -83,7 +88,8 @@ export async function StudentDirectory({ searchParams }: StudentDirectoryProps) 
     return <InvalidAcademicYear search={search} sort={sort} />;
   }
 
-  const result = await getStudents({ academicYearStart: year, sort, cursor, search });
+  const result = requestedYearPage
+    ?? await getStudents({ academicYearStart: year, sort, cursor, search });
 
   return (
     <div className="flex w-full flex-col justify-start gap-1 space-y-4">

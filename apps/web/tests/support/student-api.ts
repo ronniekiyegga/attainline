@@ -8,13 +8,11 @@ type Scenario =
   | "empty"
   | "no-enrolments"
   | "unavailable"
-  | "list-unavailable"
-  | "details-unavailable"
-  | "details-extra-fields";
+  | "list-unavailable";
 
 type ScenarioOptions = {
   listDelay?: number;
-  slowStudents?: string[];
+  holdYearsForList?: boolean;
 };
 
 type ReceivedRequest = {
@@ -30,11 +28,11 @@ type ReceivedRequest = {
 export async function useScenario(
   request: APIRequestContext,
   scenario: Scenario,
-  { listDelay = 0, slowStudents = [] }: ScenarioOptions = {},
+  { listDelay = 0, holdYearsForList = false }: ScenarioOptions = {},
 ) {
   const options = new URLSearchParams({ listDelay: String(listDelay) });
-  for (const id of slowStudents) {
-    options.append("slowStudent", id);
+  if (holdYearsForList) {
+    options.set("holdYearsForList", "");
   }
 
   const response = await request.put(

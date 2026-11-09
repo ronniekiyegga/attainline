@@ -12,14 +12,13 @@ const scenarios = [
   "no-enrolments",
   "unavailable",
   "list-unavailable",
-  "details-unavailable",
-  "details-extra-fields",
 ] as const;
 type Scenario = (typeof scenarios)[number];
 
 let scenario: Scenario = "populated";
 let listDelay = 0;
-let detailDelays = new Map<string, number>();
+let holdYearsForList = false;
+let releaseYears: (() => void) | undefined;
 let received: {
   path: string;
   academicYearStart: string | null;
@@ -63,9 +62,25 @@ function academicYearsResponse(response: ServerResponse) {
     return;
   }
 
-  sendJson(response, 200, {
+  const respond = () => sendJson(response, 200, {
     academicYearStarts: scenario === "no-enrolments" ? [] : academicYearStarts,
   });
+
+  if (!holdYearsForList) {
+    respond();
+    return;
+  }
+
+  const giveUp = setTimeout(() => {
+    releaseYears = undefined;
+    sendJson(response, 503, { error: "Student directory unavailable" });
+  }, 3000);
+
+  releaseYears = () => {
+    clearTimeout(giveUp);
+    releaseYears = undefined;
+    respond();
+  };
 }
 
 function studentsResponse(response: ServerResponse, url: URL) {
@@ -107,31 +122,6 @@ function studentsResponse(response: ServerResponse, url: URL) {
   );
 }
 
-function studentDetailsResponse(response: ServerResponse, url: URL, studentId: string) {
-  const delay = detailDelays.get(studentId) ?? 0;
-
-  if (scenario === "details-unavailable") {
-    sendJson(response, 503, { error: "Student directory unavailable" }, delay);
-    return;
-  }
-
-  const student = scenario === "empty"
-    ? undefined
-    : studentsByYear[url.searchParams.get("academicYearStart") ?? ""]
-      ?.find((candidate) => candidate.id === studentId);
-
-  if (!student) {
-    sendJson(response, 404, { error: "Student not found" }, delay);
-    return;
-  }
-
-  const body = scenario === "details-extra-fields"
-    ? { ...student, internalNote: "Synthetic note", contactEmail: "guardian@example.test" }
-    : student;
-
-  sendJson(response, 200, body, delay);
-}
-
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
   const [, first, second] = url.pathname.split("/");
@@ -141,9 +131,7 @@ createServer((request, response) => {
   } else if (request.method === "PUT" && first === "__scenario" && isScenario(second)) {
     scenario = second;
     listDelay = Number(url.searchParams.get("listDelay") ?? 0);
-    detailDelays = new Map(
-      url.searchParams.getAll("slowStudent").map((id) => [id, 1500]),
-    );
+    holdYearsForList = url.searchParams.has("holdYearsForList");
     received = [];
     response.writeHead(204).end();
   } else if (request.method === "GET" && first === "__requests") {
@@ -160,10 +148,11 @@ createServer((request, response) => {
     });
     if (second === "academic-years") {
       academicYearsResponse(response);
-    } else if (second) {
-      studentDetailsResponse(response, url, second);
-    } else {
+    } else if (!second) {
+      releaseYears?.();
       studentsResponse(response, url);
+    } else {
+      sendJson(response, 404, { error: "Not found" });
     }
   } else {
     sendJson(response, 404, { error: "Not found" });

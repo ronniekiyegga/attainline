@@ -5,18 +5,12 @@ import {
   useScenario,
 } from "./support/student-api";
 
-const averyId = "0a3f5c1e-1111-4111-8111-000000000001";
-
 function directoryRows(page: Page) {
   return page.getByRole("table").getByRole("rowheader");
 }
 
 function sortLink(page: Page) {
   return page.getByRole("columnheader", { name: /sorted by surname/ }).getByRole("link");
-}
-
-function detailsDialog(page: Page) {
-  return page.getByRole("dialog", { name: /Avery Ashgrove|Brackenridge|Calla Cindermoor/ });
 }
 
 test.describe("student directory sorting", () => {
@@ -273,78 +267,19 @@ test.describe("student details", () => {
     await expect(opener).toBeFocused();
   });
 
-  test("shows loading, unavailable and retry states", async ({ page, request }) => {
-    await useScenario(request, "details-unavailable", { slowStudents: [averyId] });
-    await page.goto("/");
-
-    await page.getByRole("button", { name: "View details for Avery Ashgrove" }).click();
-    const dialog = detailsDialog(page);
-
-    await expect(dialog.getByRole("status")).toHaveText("Loading details…");
-    await expect(dialog.getByText("Student details are temporarily unavailable."))
-      .toBeVisible();
-
-    await useScenario(request, "populated");
-    await dialog.getByRole("button", { name: "Try again" }).click();
-
-    await expect(dialog.getByRole("definition").first()).toHaveText("DEMO-SYN-001");
-  });
-
-  test("reopening a student fetches again instead of showing the last result", async ({
-    page,
-    request,
-  }) => {
-    await useScenario(request, "details-unavailable");
-    await page.goto("/");
-
-    const opener = page.getByRole("button", { name: "View details for Avery Ashgrove" });
-    await opener.click();
-    await expect(detailsDialog(page).getByText("Student details are temporarily unavailable."))
-      .toBeVisible();
-    await page.keyboard.press("Escape");
-
-    await useScenario(request, "populated", { slowStudents: [averyId] });
-    await opener.click();
-
-    await expect(detailsDialog(page).getByRole("status")).toHaveText("Loading details…");
-    await expect(detailsDialog(page).getByText("Student details are temporarily unavailable."))
-      .toHaveCount(0);
-    await expect(detailsDialog(page).getByRole("definition").first()).toHaveText("DEMO-SYN-001");
-  });
-
-  test("explains a student who is no longer enrolled in the year", async ({
+  test("shows the selected row without requesting it again", async ({
     page,
     request,
   }) => {
     await useScenario(request, "populated");
     await page.goto("/");
-
-    await useScenario(request, "empty");
-    await page.getByRole("button", { name: "View details for Avery Ashgrove" }).click();
-
-    await expect(detailsDialog(page)).toContainText(
-      "This student is not enrolled in 2026/27.",
-    );
-  });
-
-  test("ignores a slow response for a previously selected student", async ({
-    page,
-    request,
-  }) => {
-    await useScenario(request, "populated", { slowStudents: [averyId] });
-    await page.goto("/");
+    const listRequests = (await receivedRequests(request)).length;
 
     await page.getByRole("button", { name: "View details for Avery Ashgrove" }).click();
-    await expect(detailsDialog(page).getByRole("status")).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Avery Ashgrove" }).getByRole("definition"))
+      .toHaveText(["DEMO-SYN-001", "Year 7", "7A"]);
 
-    await page.getByRole("button", { name: "View details for Brackenridge" }).click();
-    const dialog = page.getByRole("dialog", { name: "Brackenridge" });
-    await expect(dialog.getByRole("definition").first()).toHaveText("DEMO-SYN-002");
-
-    await page.waitForTimeout(2000);
-    await expect(dialog.getByRole("definition").first()).toHaveText("DEMO-SYN-002");
-    await expect(dialog).not.toContainText("DEMO-SYN-001");
+    expect(await receivedRequests(request)).toHaveLength(listRequests);
   });
 });
 
@@ -377,40 +312,4 @@ test.describe("student directory layout", () => {
       expect(await overflow()).toBe(false);
     });
   }
-});
-
-test.describe("student details proxy", () => {
-  test("returns only the directory fields, uncached", async ({ request }) => {
-    await useScenario(request, "details-extra-fields");
-
-    const response = await request.get(`/api/students/${averyId}?year=2026`);
-
-    expect(response.status()).toBe(200);
-    expect(response.headers()["cache-control"]).toBe("no-store");
-    expect(Object.keys(await response.json()).sort()).toEqual([
-      "classGroup",
-      "firstName",
-      "id",
-      "institutionStudentRef",
-      "surname",
-      "yearGroup",
-    ]);
-  });
-
-  test("rejects malformed requests without calling the API", async ({ request }) => {
-    await useScenario(request, "populated");
-
-    for (const path of [
-      "/api/students/not-a-uuid?year=2026",
-      `/api/students/${averyId}`,
-      `/api/students/${averyId}?year=2026&year=2025`,
-      `/api/students/${averyId}?year=abc`,
-    ]) {
-      const response = await request.get(path);
-      expect(response.status(), path).toBe(400);
-      expect(await response.json(), path).toEqual({ error: "Invalid student request" });
-    }
-
-    expect(await receivedRequests(request)).toEqual([]);
-  });
 });
