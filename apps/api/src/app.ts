@@ -11,6 +11,7 @@ import { requestId } from "./request-id.js";
 type AppDependencies = {
   checkDatabase: () => Promise<void>;
   authRouter: Router;
+  analyticsRouter: Router;
   studentRouter: Router;
   assessmentRouter: Router;
   requireSession: RequestHandler;
@@ -20,6 +21,7 @@ type AppDependencies = {
 export function createApp({
   checkDatabase,
   authRouter,
+  analyticsRouter,
   studentRouter,
   assessmentRouter,
   requireSession,
@@ -51,6 +53,7 @@ export function createApp({
   });
 
   app.use("/auth", authRouter);
+  app.use("/analytics", requireSession, analyticsRouter);
   app.use("/students/:studentId/assessments", requireSession, assessmentRouter);
   app.use("/students", requireSession, studentRouter);
 

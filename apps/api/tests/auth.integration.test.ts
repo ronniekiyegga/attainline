@@ -56,6 +56,7 @@ async function startApi(context: TestContext) {
       controller: createAuthController({ service, logger }),
       requireSession,
     }),
+    analyticsRouter: Router(),
     studentRouter: studentRouter({
       queryStudents: studentRepository.listStudents,
       queryStudent: studentRepository.findStudent,
@@ -314,17 +315,23 @@ test("refuses accounts without an active membership", (context) =>
 
 test("rejects requests without a valid session before reaching student data", (context) =>
   withWorld(context, async (url) => {
-    for (const authorization of [
-      undefined,
-      "Bearer",
-      `Bearer ${createSessionToken()}`,
-      `Basic ${Buffer.from("head:password").toString("base64")}`,
+    for (const path of [
+      "/students/academic-years",
+      "/analytics/overview?academicYearStart=2026",
+      "/analytics/rankings?academicYearStart=2026",
     ]) {
-      const response = await fetch(`${url}/students/academic-years`, {
-        headers: authorization ? { Authorization: authorization } : {},
-      });
-      assert.equal(response.status, 401, String(authorization));
-      assert.deepEqual(await response.json(), { error: "Authentication required" });
+      for (const authorization of [
+        undefined,
+        "Bearer",
+        `Bearer ${createSessionToken()}`,
+        `Basic ${Buffer.from("head:password").toString("base64")}`,
+      ]) {
+        const response = await fetch(`${url}${path}`, {
+          headers: authorization ? { Authorization: authorization } : {},
+        });
+        assert.equal(response.status, 401, `${path} ${String(authorization)}`);
+        assert.deepEqual(await response.json(), { error: "Authentication required" });
+      }
     }
 
     const cookieOnly = await fetch(`${url}/students/academic-years`, {

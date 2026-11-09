@@ -11,6 +11,10 @@ import { createAssessmentController } from "./features/assessments/assessment.co
 import { listResultsUpToYear } from "./features/assessments/assessment.repository.js";
 import { createAssessmentRouter } from "./features/assessments/assessment.routes.js";
 import { createAssessmentService } from "./features/assessments/assessment.service.js";
+import { createAnalyticsController } from "./features/analytics/analytics.controller.js";
+import { listCohortAssessmentRows } from "./features/analytics/analytics.repository.js";
+import { createAnalyticsRouter } from "./features/analytics/analytics.routes.js";
+import { createAnalyticsService } from "./features/analytics/analytics.service.js";
 import {
   createStudentCursorCodec,
   parseStudentCursorKey,
@@ -45,11 +49,15 @@ const requireSession = createSessionGuard({
 const studentDirectory = createStudentService({ queryStudents: listStudents, cursorCodec });
 
 const assessmentService = createAssessmentService({ findStudent, listResultsUpToYear });
+const analyticsService = createAnalyticsService({ listCohortAssessmentRows });
 
 const app = createApp({
   checkDatabase,
   logger,
   requireSession,
+  analyticsRouter: createAnalyticsRouter(
+    createAnalyticsController({ service: analyticsService, logger }),
+  ),
   authRouter: createAuthRouter({
     controller: createAuthController({ service: authService, logger }),
     requireSession,

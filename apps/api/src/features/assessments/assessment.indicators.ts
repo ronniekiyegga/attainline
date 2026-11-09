@@ -11,6 +11,20 @@ export type MeasureScore = {
 export const STATUS_MEASURES = ["CAT4_MEAN", "PTE", "NGRT_READING"] as const;
 export const PRIORITY_MEASURE = "CAT4_QUANTITATIVE";
 
+export const RANKING_MEASURES = [
+  "CAT4_MEAN",
+  "CAT4_VERBAL",
+  "CAT4_QUANTITATIVE",
+  "CAT4_NON_VERBAL",
+  "CAT4_SPATIAL",
+  "NGRT_READING",
+  "PTE",
+  "PTM",
+  "PTS",
+] as const satisfies readonly AssessmentMeasure[];
+
+export type RankingMeasure = (typeof RANKING_MEASURES)[number];
+
 export function calculateStatus(latest: MeasureScore[]) {
   const inputs = STATUS_MEASURES.flatMap((measure) =>
     latest.filter((score) => score.measure === measure));
@@ -46,4 +60,16 @@ export function calculatePriority(latest: MeasureScore[]) {
   const value: StudentPriority = score <= 90 ? "HIGH" : score < 100 ? "MEDIUM" : "LOW";
 
   return { value, standardAgeScore: score, basedOn: PRIORITY_MEASURE };
+}
+
+type RankedScore = {
+  id: string;
+  surname: string;
+  standardAgeScore: number;
+};
+
+export function compareRankedScores(left: RankedScore, right: RankedScore): number {
+  return right.standardAgeScore - left.standardAgeScore
+    || left.surname.localeCompare(right.surname, "en-GB")
+    || left.id.localeCompare(right.id);
 }

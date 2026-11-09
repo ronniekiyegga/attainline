@@ -13,6 +13,7 @@ async function startApp(
     checkDatabase,
     logger,
     authRouter: Router(),
+    analyticsRouter: Router(),
     studentRouter: Router(),
     assessmentRouter: Router(),
     requireSession: (_request, _response, next) => next(),

@@ -138,6 +138,9 @@ test.describe("mobile navigation", () => {
       dialog.getByLabel("School"),
       dialog.getByRole("button", { name: "Switch", exact: true }),
       dialog.getByRole("button", { name: "Sign out" }),
+      dialog.getByRole("link", { name: "Dashboard" }),
+      dialog.getByRole("link", { name: "Analytics" }),
+      dialog.getByRole("link", { name: "Rankings" }),
       link,
       close,
     ]) {

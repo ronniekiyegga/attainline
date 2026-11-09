@@ -21,6 +21,7 @@
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted: hsl(var(--accent));
   --color-accent: hsl(var(--accent));
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-border: hsl(var(--border));
@@ -172,6 +173,7 @@
   --animate-sheet-out: sheet-out 300ms ease-in-out;
   --animate-tooltip-in: tooltip-in 150ms ease;
   --animate-tooltip-out: tooltip-out 150ms ease;
+  --animate-slide-up-fade: slide-up-fade ease-in-out;
 
   @keyframes fade-in {
     from {
@@ -211,6 +213,17 @@
       scale: 0.95;
     }
   }
+
+  @keyframes slide-up-fade {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 @utility sidebar-collapsed-shadow {
@@ -242,6 +255,13 @@
 }
 
 @layer utilities {
+  .overlayCard {
+    border-radius: 1.00769rem;
+    border: 3px solid rgba(255, 255, 255, 0.6);
+    background: #fcfcfc;
+    box-shadow: 8px 4px 40px 0 rgba(219, 220, 230, 0.37);
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
   }

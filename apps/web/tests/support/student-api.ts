@@ -37,7 +37,9 @@ type Scenario =
   | "unavailable"
   | "list-unavailable"
   | "session-expired"
-  | "assessments-unavailable";
+  | "assessments-unavailable"
+  | "analytics-unavailable"
+  | "teacher-dashboard";
 
 type ScenarioOptions = {
   listDelay?: number;

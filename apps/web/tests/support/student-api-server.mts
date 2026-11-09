@@ -28,6 +28,8 @@ const scenarios = [
   "list-unavailable",
   "session-expired",
   "assessments-unavailable",
+  "analytics-unavailable",
+  "teacher-dashboard",
 ] as const;
 type Scenario = (typeof scenarios)[number];
 
@@ -188,6 +190,89 @@ const assessments: Record<string, unknown> = {
   },
 };
 
+const overview = {
+  academicYearStart: 2026,
+  cohortSize: 3,
+  assessedStudents: 2,
+  coveragePercentage: 66.7,
+  onTrackPercentage: 33.3,
+  averageStandardAgeScore: 100.3,
+  statusCounts: { ON_TRACK: 1, AT_RISK: 1, PENDING: 1, OFF_TRACK: 0 },
+  priorityCounts: { LOW: 1, MEDIUM: 1, HIGH: 1 },
+  yearGroups: [{ yearGroup: 7, students: 2 }, { yearGroup: 8, students: 1 }],
+  measures: [
+    { measure: "CAT4_MEAN", students: 3, averageStandardAgeScore: 104, averageStanine: 5.3 },
+    { measure: "CAT4_QUANTITATIVE", students: 2, averageStandardAgeScore: 96, averageStanine: 4.5 },
+    { measure: "NGRT_READING", students: 2, averageStandardAgeScore: 98, averageStanine: 4.5 },
+  ],
+  topRankings: [
+    { ...students[2], rank: 1, standardAgeScore: 111, stanine: 6, nationalPercentileRank: 77, status: "ON_TRACK", priority: "LOW" },
+    { ...students[0], rank: 2, standardAgeScore: 103, stanine: 5, nationalPercentileRank: 58, status: "AT_RISK", priority: "HIGH" },
+    { ...students[1], rank: 3, standardAgeScore: 98, stanine: 4, nationalPercentileRank: 42, status: "PENDING", priority: "MEDIUM" },
+  ],
+};
+
+function analyticsResponse(response: ServerResponse, url: URL, organisation: StandInOrganisation) {
+  const academicYearStart = Number(url.searchParams.get("academicYearStart") ?? 2026);
+  if (scenario === "analytics-unavailable") {
+    sendJson(response, 503, { error: "Analytics unavailable" });
+    return;
+  }
+
+  if (organisation === auth.college) {
+    sendJson(response, 200, url.pathname.endsWith("/overview") ? {
+      ...overview,
+      academicYearStart,
+      cohortSize: 0,
+      assessedStudents: 0,
+      coveragePercentage: 0,
+      onTrackPercentage: 0,
+      averageStandardAgeScore: null,
+      statusCounts: { ON_TRACK: 0, AT_RISK: 0, PENDING: 0, OFF_TRACK: 0 },
+      priorityCounts: { LOW: 0, MEDIUM: 0, HIGH: 0 },
+      yearGroups: [],
+      measures: [],
+      topRankings: [],
+    } : {
+      academicYearStart,
+      measure: "CAT4_MEAN",
+      yearGroup: null,
+      cohortSize: 0,
+      availableYearGroups: [],
+      items: [],
+      page: 1,
+      limit: 10,
+      total: 0,
+      totalPages: 0,
+    });
+    return;
+  }
+
+  if (url.pathname.endsWith("/overview")) {
+    sendJson(response, 200, { ...overview, academicYearStart });
+    return;
+  }
+
+  const measure = url.searchParams.get("measure") ?? "CAT4_MEAN";
+  const yearGroup = url.searchParams.get("yearGroup");
+  const page = Number(url.searchParams.get("page") ?? 1);
+  const limit = Number(url.searchParams.get("limit") ?? 10);
+  const filtered = overview.topRankings.filter((student) => !yearGroup || student.yearGroup === Number(yearGroup));
+  const offset = (page - 1) * limit;
+  sendJson(response, 200, {
+    academicYearStart,
+    measure,
+    yearGroup: yearGroup ? Number(yearGroup) : null,
+    cohortSize: overview.cohortSize,
+    availableYearGroups: overview.yearGroups.map(({ yearGroup: value }) => value),
+    items: filtered.slice(offset, offset + limit),
+    page,
+    limit,
+    total: filtered.length,
+    totalPages: Math.ceil(filtered.length / limit),
+  });
+}
+
 function enrolledStudent(url: URL, studentId: string) {
   return studentsByYear[url.searchParams.get("academicYearStart") ?? ""]
     ?.find(({ id }) => id === studentId);
@@ -287,8 +372,8 @@ async function authResponse(request: IncomingMessage, response: ServerResponse, 
     sendJson(response, 200, {
       user: { email: auth.email, displayName: "Morgan Vale" },
       organisation: { id: organisation.id, name: organisation.name },
-      role: "HEADTEACHER",
-      yearGroups: null,
+      role: scenario === "teacher-dashboard" ? "TEACHER" : "HEADTEACHER",
+      yearGroups: scenario === "teacher-dashboard" ? [7, 8] : null,
       organisations: [auth.academy, auth.college].map(({ id, name }) => ({ id, name })),
     });
   } else if (request.method === "DELETE" && path === "/auth/session") {
@@ -328,6 +413,10 @@ createServer((request, response) => {
     sendJson(response, 200, authRequests);
   } else if (first === "auth") {
     void authResponse(request, response, url.pathname);
+  } else if (request.method === "GET" && first === "analytics" && !sessionOrganisation(request)) {
+    sendJson(response, 401, { error: "Authentication required" });
+  } else if (request.method === "GET" && first === "analytics") {
+    analyticsResponse(response, url, sessionOrganisation(request)!);
   } else if (request.method === "GET" && first === "students" && !sessionOrganisation(request)) {
     sendJson(response, 401, { error: "Authentication required" });
   } else if (request.method === "GET" && first === "students") {
