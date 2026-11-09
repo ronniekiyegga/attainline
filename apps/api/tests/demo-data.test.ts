@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  DEMO_ACCOUNT_PASSWORD,
   demoAssessmentResults,
   demoEnrolments,
   demoOrganisations,
@@ -11,6 +12,11 @@ import {
   percentileFor,
   stanineFor,
 } from "../scripts/demo-data.js";
+
+test("demo accounts use the documented local password", () => {
+  assert.equal(DEMO_ACCOUNT_PASSWORD, "AttainlineDemo!2026");
+  assert.ok(DEMO_ACCOUNT_PASSWORD.length >= 12);
+});
 
 const [academy] = demoOrganisations;
 

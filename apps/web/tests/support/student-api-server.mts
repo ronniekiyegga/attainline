@@ -36,6 +36,7 @@ type Scenario = (typeof scenarios)[number];
 let scenario: Scenario = "populated";
 let listDelay = 0;
 let holdYearsForList = false;
+let listRequested = false;
 let releaseYears: (() => void) | undefined;
 let received: {
   path: string;
@@ -95,6 +96,11 @@ function academicYearsResponse(response: ServerResponse) {
   });
 
   if (!holdYearsForList) {
+    respond();
+    return;
+  }
+
+  if (listRequested) {
     respond();
     return;
   }
@@ -403,6 +409,8 @@ createServer((request, response) => {
     scenario = second;
     listDelay = Number(url.searchParams.get("listDelay") ?? 0);
     holdYearsForList = url.searchParams.has("holdYearsForList");
+    listRequested = false;
+    releaseYears = undefined;
     received = [];
     authRequests = [];
     revokedTokens.clear();
@@ -433,6 +441,7 @@ createServer((request, response) => {
     if (second === "academic-years") {
       academicYearsResponse(response);
     } else if (!second) {
+      listRequested = true;
       releaseYears?.();
       studentsResponse(response, url);
     } else {

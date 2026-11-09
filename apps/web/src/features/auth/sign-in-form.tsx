@@ -3,6 +3,7 @@
 import { BookUser, Briefcase, Loader, type LucideIcon } from "lucide-react";
 import { useActionState, useState } from "react";
 import { signIn, type SignInState } from "./auth.actions";
+import { DEMO_ACCOUNT_PASSWORD } from "./demo-credentials";
 
 type DemoRole = {
   id: string;
@@ -97,16 +98,19 @@ export function SignInForm() {
   const [state, formAction, isPending] = useActionState(signIn, initialState);
   const [roleId, setRoleId] = useState(demoRoles[0].id);
   const [email, setEmail] = useState(state.email);
+  const [password, setPassword] = useState(DEMO_ACCOUNT_PASSWORD);
   const [submittedState, setSubmittedState] = useState(state);
 
   if (submittedState !== state) {
     setSubmittedState(state);
     setEmail(state.email);
+    setPassword(DEMO_ACCOUNT_PASSWORD);
   }
 
   function selectRole(role: DemoRole) {
     setRoleId(role.id);
     setEmail(role.email);
+    setPassword(DEMO_ACCOUNT_PASSWORD);
   }
 
   return (
@@ -165,6 +169,8 @@ export function SignInForm() {
             autoComplete="current-password"
             required
             disabled={isPending}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
             className={`${fieldClass} h-[42px] py-5`}
           />
         </div>

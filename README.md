@@ -17,6 +17,9 @@ Existing features are being reviewed and migrated individually.
 - Staff sign-in with server-side sessions, school memberships, switching
   between schools and sign-out. The shell shows the signed-in staff member,
   their role and the active school.
+- Teacher and leadership dashboards at `/dashboard`, cohort analytics at
+  `/analytics`, and assessment rankings at `/rankings`, with school and
+  assigned-year-group restrictions enforced by the API.
 - Express API with separate HTTP liveness and database readiness endpoints.
 - Prisma schema and migrations for organisations, students, annual
   enrolments, assessment results, staff users, memberships, year-group
@@ -35,13 +38,7 @@ Only independently invented demo records are supported. See
 [Authentication](#authentication) for what the access model does and does
 not cover.
 
-## Roadmap
-
-Remaining increments, in order:
-
-1. Teacher and leadership dashboards, student rankings and attainment
-   charts.
-2. End-to-end workflow coverage and release documentation.
+## Scope boundary
 
 Not planned for this rebuild: question-level analysis, interventions,
 attendance, notifications, spreadsheet or warehouse imports and the
@@ -100,11 +97,10 @@ Migrations create the schema; they do not load data. To fill the local
 Docker database with invented demo students (65 across two fictional
 organisations, enough for three directory pages), their placements and
 CAT4, NGRT and Progress Test results for 2025/26 and 2026/27, and three demo
-staff accounts, choose a password of at
-least 12 characters for those accounts:
+staff accounts:
 
 ```bash
-SEED_DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433/attainline" DEMO_PASSWORD="<choose one>" pnpm --filter @attainline/api seed:demo
+SEED_DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433/attainline" pnpm --filter @attainline/api seed:demo
 ```
 
 | Account | Access |
@@ -113,12 +109,13 @@ SEED_DATABASE_URL="postgresql://attainline:local-development-only@127.0.0.1:5433
 | `rowan.thistle@example.test` | Head of year for Year 9 at Fictional Demo Academy |
 | `sasha.wren@example.test` | Teacher for Years 7 and 8 at Fictional Demo Academy |
 
-The password is never committed. Existing accounts keep their password
-when the seed is rerun.
+All demo accounts use `AttainlineDemo!2026`. The sign-in form fills this
+password automatically. Rerunning the seed resets these synthetic accounts
+to the same password.
 
 The seed refuses any target except the local `attainline` database. It
-only adds missing rows, never updates or deletes existing ones, so it is
-safe to rerun. Each placement is derived from the student's `DEMO-`
+only adds missing domain rows and resets the reserved demo account passwords;
+it never deletes existing rows, so it is safe to rerun. Each placement is derived from the student's `DEMO-`
 reference, never from row order. Students in Year 7 in 2026/27 have no
 2025/26 enrolment, some 2025/26 placements have no class, and surnames
 repeat. When an existing enrolment differs from the demo placement, the
@@ -258,6 +255,21 @@ kept, so web and API log lines for one request share an ID; any other
 value is replaced rather than echoed. Failure logs record Prisma and
 PostgreSQL error codes, never messages, URLs, cursors or student data,
 because driver messages can contain hosts, file paths and row values.
+
+## Analytics API
+
+`GET /analytics/overview?academicYearStart=2026` returns the visible
+cohort's student count, assessment coverage, status distribution and
+measure summaries. `GET /analytics/rankings?academicYearStart=2026&measure=CAT4_MEAN&yearGroup=9&page=1&limit=25`
+returns a stable, paginated ranking plus the visible year groups for the
+selected academic year.
+
+Both endpoints require a session bearer token. Their repository query is
+scoped to the active organisation and, for teachers and heads of year, to
+assigned year groups. Ranking status and priority reuse the assessment
+indicator implementation used by student profiles. See
+[the analytics decision](docs/decisions/analytics-and-rankings.md) for the
+aggregation, rendering and scaling boundaries.
 Prisma reports some errors under `meta.driverAdapterError` and others,
 such as check and restrict violations, as a raw adapter error with the
 cause at the top level; the classifier reads both. Log fields accept only

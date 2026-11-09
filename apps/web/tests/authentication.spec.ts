@@ -47,8 +47,8 @@ test.describe("signed out", () => {
 
     await signIn(page, standInAuth.email, standInAuth.password);
 
-    await expect(page).toHaveURL("/");
-    await expect(page.getByRole("table").getByRole("rowheader").first()).toHaveText("Avery Ashgrove");
+    await expect(page).toHaveURL("/dashboard");
+    await expect(page.getByRole("heading", { name: /Welcome Back, Headteacher/ })).toBeVisible();
 
     const cookie = await sessionCookieValue(page);
     expect(cookie).toMatchObject({ httpOnly: true, secure: true, sameSite: "Lax", path: "/" });
@@ -74,14 +74,14 @@ test.describe("signed out", () => {
 
     await expect(signInError(page)).toHaveText("Email or password is incorrect.");
     await expect(page.getByLabel("Work email")).toHaveValue(standInAuth.email);
-    await expect(page.getByLabel("Password")).toHaveValue("");
+    await expect(page.getByLabel("Password")).toHaveValue(standInAuth.password);
     expect(await sessionCookieValue(page)).toBeUndefined();
 
     await signIn(page, "someone.else@example.test", standInAuth.password);
     await expect(signInError(page)).toHaveText("Email or password is incorrect.");
   });
 
-  test("demo account cards fill the matching email address", async ({ page, request }) => {
+  test("demo account cards fill the matching credentials", async ({ page, request }) => {
     await useScenario(request, "populated");
     await page.goto("/sign-in");
 
@@ -89,12 +89,13 @@ test.describe("signed out", () => {
     const teacher = page.getByRole("radio", { name: /Teacher/ });
     await expect(leader).toBeChecked();
     await expect(page.getByLabel("Work email")).toHaveValue("morgan.vale@example.test");
+    await expect(page.getByLabel("Password")).toHaveValue(standInAuth.password);
 
     await teacher.focus();
     await page.keyboard.press("Space");
     await expect(teacher).toBeChecked();
     await expect(page.getByLabel("Work email")).toHaveValue("sasha.wren@example.test");
-    await expect(page.getByLabel("Password")).toHaveValue("");
+    await expect(page.getByLabel("Password")).toHaveValue(standInAuth.password);
   });
 
   test("explains a locked account", async ({ page, request }) => {
@@ -118,7 +119,7 @@ test.describe("signed in", () => {
     await page.context().clearCookies();
     await page.goto("/sign-in");
     await signIn(page, standInAuth.email, standInAuth.password);
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
     const token = (await sessionCookieValue(page))?.value;
 
     await openAccountMenu(page);

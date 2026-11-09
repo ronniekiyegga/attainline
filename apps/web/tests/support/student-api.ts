@@ -5,7 +5,7 @@ export const studentApiUrl = `http://127.0.0.1:${studentApiPort}`;
 
 export const standInAuth = {
   email: "morgan.vale@example.test",
-  password: "stand-in-password",
+  password: "AttainlineDemo!2026",
   lockedEmail: "locked.account@example.test",
   academy: {
     id: "11111111-1111-4111-8111-111111111111",

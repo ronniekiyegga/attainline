@@ -347,3 +347,36 @@ original source for the header and report rows.
   no page-level horizontal overflow at 390 px.
 - The migration applies cleanly with no schema drift; lint, typecheck and
   both production builds passed.
+
+## 2026-11-09: Dashboards, analytics and rankings
+
+Added the teacher and leadership dashboard, cohort analytics and assessment
+ranking routes. They share one API aggregation feature and the assessment
+indicator rules, while organisation and year-group restrictions remain in the
+database query. Ranking pagination is server-side and stable; the response also
+contains its filter options so the page makes one cohort request.
+
+The web routes render on the server with URL-owned filters and uncached,
+authenticated reads. Suspense boundaries preserve Next.js partial prerendering.
+The teacher and Head of Year surface uses the original widget, performance and
+ranking composition; the headteacher surface uses the original leadership
+intelligence composition. Their component class values, gradients, spacing,
+borders and responsive breakpoints were migrated from the source rather than
+redesigned. Semantic tables or text summaries provide accessible chart
+equivalents, with no new frontend dependency.
+
+The original application was inspected read-only as a source and visual
+reference. No private dataset was opened and no source record or asset was
+imported. Browser fixtures and integration records are independently invented.
+
+### Verification
+
+- API unit suite: 53 tests passed.
+- PostgreSQL integration suite: 33 tests passed against the isolated local
+  `attainline_test` database.
+- Playwright: 62 tests passed, including the complete signed-in journey,
+  school switching, empty and failed analytics, keyboard filter operation and
+  layouts at 390, 768, 1024 and 1440 px. A role-specific test exercises the
+  original teacher dashboard composition separately from leadership.
+- Frontend lint, workspace typecheck and both production builds passed on
+  Node.js 24.19.0. The three analytics routes build as partial prerenders.

@@ -60,9 +60,9 @@ was compared with the original rendered at 1440×900 and 390×844, element by
 element. The header, role cards and form fields match pixel for pixel
 apart from the deliberate changes below.
 
-- The role cards select a demo account and fill its email address. In
-  EduFeedbackPro they chose the landing page and, in development only,
-  filled demo credentials.
+- The role cards select a public synthetic demo account and fill its email
+  address and documented shared demo password. In EduFeedbackPro they chose
+  the landing page and filled development credentials.
 - The Google and Microsoft buttons, the "OR" divider and the sign-up link
   are not shown, because OAuth and self-service sign-up are not
   implemented. The form column is therefore shorter and centred lower.

@@ -1,4 +1,5 @@
 export const DEMO_ACADEMIC_YEAR_STARTS = [2025, 2026] as const;
+export const DEMO_ACCOUNT_PASSWORD = "AttainlineDemo!2026";
 
 const CURRENT_ACADEMIC_YEAR_START = 2026;
 

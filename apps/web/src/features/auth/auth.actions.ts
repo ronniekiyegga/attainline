@@ -71,7 +71,7 @@ export async function signIn(_previous: SignInState, formData: FormData): Promis
   }
 
   await storeSession(result.data);
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function signOut(): Promise<void> {
@@ -95,7 +95,7 @@ export async function switchOrganisation(formData: FormData): Promise<void> {
   const sessionToken = await readSessionToken();
 
   if (!organisationId.success || !sessionToken) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   const result = await requestApi({
@@ -116,5 +116,5 @@ export async function switchOrganisation(formData: FormData): Promise<void> {
     await storeSession(result.data);
   }
 
-  redirect("/");
+  redirect("/dashboard");
 }
