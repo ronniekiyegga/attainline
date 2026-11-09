@@ -26,22 +26,33 @@ and placement fields as a directory row. Organisation and year are both
 part of the lookup, so a student from another organisation and a student
 without that year's enrolment are indistinguishable: both return 404.
 
-The browser loads details through a Next.js route handler, because the
-API address is server-only configuration. Each time a row's View action
-opens the dialog it starts a new selection. Responses are keyed by
-selection, student, year and attempt, and the previous request is aborted
-when the selection changes, so a slow response cannot replace another
-student's details and reopening a student never shows the previous
-opening's result.
+The details dialog renders the selected row. It previously fetched this
+endpoint through a Next.js route handler, with abortable, selection-keyed
+requests and a retry state. That request returned the same six fields the
+row already held, so it added latency and a failure mode ("unavailable"
+for data already on screen) without adding information. The route handler
+and client fetch were removed; opening the dialog makes no request.
 
-The web route returns only the six directory fields, whatever else the
-API might send, with `Cache-Control: no-store`. The student ID travels in
-its URL path, so it can appear in access logs; with real data this route
-needs authentication.
+The row-backed dialog was later replaced by the student profile, which
+adds information the row does not have: that year's assessment results,
+status and priority. The profile is a route, `/students/<id>`. A View link
+in the table is intercepted by a parallel `@modal` slot and rendered on the
+server as a dialog over the directory; loading the same URL directly
+renders it as a page. The server requests the student and their
+assessments together, so the browser never needs the API address, Back
+closes the dialog, and the URL can be shared.
 
-The dialog shows identity and placement only. The original modal's
-reports, notes, contact details, sharing and next-student actions depend
-on data and workflows that do not exist in this project.
+The profile keeps EduFeedbackPro's "Student Portfolio" sheet, face card
+and report-row layout. Its risk overview, recommendations, overall
+performance and AI summary tabs, notes, contact details, share and
+next-student actions, similar-student avatars and assistant are not
+migrated. They used heuristics, placeholder or fixture data, or features
+outside this project (see docs/decisions/assessment-results.md).
+
+Status colours keep the original band gradients on the indicator dot.
+Status text uses darker stops on white (at least 4.92:1) and lighter
+stops on the dark card (at least 4.53:1), instead of the original 500
+shades, which fail AA for this text size.
 
 The reference card's grey text and light gradient fail WCAG AA contrast
 for 11px text. Attainline keeps the gradient treatment but uses a darker

@@ -1,5 +1,3 @@
-// Fields are limited to primitives so error objects, requests and query
-// results cannot be logged wholesale by accident.
 type LogFields = Record<string, string | number | boolean | undefined>;
 
 export type Logger = {

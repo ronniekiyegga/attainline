@@ -29,11 +29,12 @@ Implemented:
 
 Not migrated from the original table: row selection, drag reordering,
 face-card view, sorting by other columns, avatars and photographs,
-priority, status, progress and last-active columns, the details modal's
-reports, notes, contact details, sharing and next-student actions, and
-total counts.
+priority, status, progress and last-active columns, and total counts. The
+student profile is described in docs/decisions/assessment-results.md.
 
-Authentication and permissions remain a separate increment.
+Access is limited to the signed-in membership's school and, for heads of
+year and teachers, their assigned year groups (see
+docs/decisions/authentication-and-sessions.md).
 The public demo must contain only independently invented records.
 
 ## Entities and rules
@@ -70,9 +71,10 @@ starts a new pagination sequence.
 
 GET /students/<id>?academicYearStart=2026
 
-Returns the same fields as a directory item for one student in the
-configured organisation, or 404 when the student is not enrolled in that
-year or belongs to another organisation.
+Returns the same fields as a directory item for one student visible to
+the session, or 404 when the student is not enrolled in that
+year or belongs to another organisation. The student profile requests it
+together with the student's assessment results.
 
 Invalid parameters return 400. Query failures return 503.
 An empty successful result returns 200 with an empty items array.
@@ -94,22 +96,23 @@ measured values that matter most: header and row heights, the card shadow,
 type sizes and colours, the year tab, the columns menu and the details
 sheet.
 
-The original uses Tailwind 3 colours. `globals.css` pins the slate, gray
-and zinc scales to those values, because the Tailwind 4 defaults render
+The original uses Tailwind 3 colours. `globals.css` pins the slate, gray,
+zinc, blue, violet, purple, red, emerald, green, amber, yellow and rose
+scales to those values, because the Tailwind 4 defaults render
 slightly different colours.
 
 Known differences from the reference:
 - Missing columns, avatars, drag handles, selection, status tabs with
-  counts, the table/face-card switch, and the modal's reports, notes,
-  contact details and sharing are not migrated.
+  counts and the table/face-card switch are not migrated.
 - The toolbar has an explicit Search button, because search is submitted
   rather than run on every keystroke, and the column control is labelled
   Columns instead of Filter.
-- Rows open details from a View button instead of an actions menu.
+- Rows open the student profile from a View link instead of an actions
+  menu.
 - Pagination shows First page and Next page instead of Previous and Next
   with page counts, because cursors only move forward.
-- The details sheet shows initials instead of a photograph and a Close
-  button where the original shows status.
+- The profile shows initials instead of a photograph, and a Close button
+  beside the status.
 - While loading, only the table skeleton is shown; the original also shows
   its toolbar.
 - A failed load shows an error with a retry link; the original shows the
@@ -136,4 +139,21 @@ Invalid pagination must not silently restart at the first page.
 Pagination does not provide a snapshot. Inserts before the cursor appear
 when browsing restarts; surname changes can move records across pages.
 
-Organisation scoping is not user authorisation.
+Prisma loads a page's students and their enrolments with two queries.
+Both run in one repeatable-read transaction, so an enrolment removed
+between them cannot leave a listed student without the placement that
+qualified it.
+
+Surname order and cursor comparisons both use the database collation, so
+paging is consistent within one database. Order can differ between
+databases with different collations: the local test database may use
+`C`, which sorts upper case before lower case, while the CI PostgreSQL
+image uses `en_US.utf8`.
+
+When the URL names an academic year, the web app requests that year's
+students alongside the list of years instead of after it. A link to a
+year without enrolments therefore makes one list request whose result is
+discarded.
+
+A student outside the session's school or year groups returns 404, the
+same as a student that does not exist.

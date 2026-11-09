@@ -9,8 +9,6 @@ requireLocalTestDatabase();
 
 const { database } = await import("../src/database.js");
 
-// Fixtures are created here, not taken from demo seed data, so these
-// checks run against any migrated attainline_test database.
 const organisationA = randomUUID();
 const organisationB = randomUUID();
 const studentA = randomUUID();

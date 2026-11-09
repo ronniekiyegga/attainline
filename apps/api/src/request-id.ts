@@ -12,8 +12,6 @@ declare global {
 
 const requestIdSchema = z.uuid();
 
-// An upstream UUID is kept so web and API logs share one ID. Anything else
-// is replaced rather than echoed, which keeps caller input out of logs.
 export const requestId: RequestHandler = (request, response, next) => {
   const incoming = requestIdSchema.safeParse(request.get("x-request-id"));
   const id = incoming.success ? incoming.data : randomUUID();

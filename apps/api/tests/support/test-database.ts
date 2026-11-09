@@ -1,7 +1,5 @@
 import "dotenv/config";
 
-// Integration tests create and delete rows, so they refuse to run against
-// anything except a local database named attainline_test.
 export function requireLocalTestDatabase() {
   const connectionString = process.env.DATABASE_URL;
 
