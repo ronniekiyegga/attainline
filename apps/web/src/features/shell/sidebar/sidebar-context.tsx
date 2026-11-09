@@ -60,8 +60,6 @@ export function SidebarProvider({
   const [wasMobile, setWasMobile] = useState(isMobile);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  // Leaving the mobile layout unmounts the sheet; without this reset it
-  // would reopen unprompted on the next return to mobile width.
   if (wasMobile !== isMobile) {
     setWasMobile(isMobile);
     setOpenMobile(false);

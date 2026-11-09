@@ -17,6 +17,7 @@ const cursor: StudentCursor = {
   surname: "Dunmerrow",
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   academicYearStart: 2026,
+  sort: "surname-asc",
 };
 
 const codec = createStudentCursorCodec(randomBytes(32));
@@ -96,6 +97,7 @@ test("every surname at the length limit fits the cursor limit", () => {
     ...cursor,
     surname: longest.controlCharacters,
     academicYearStart: MAX_ACADEMIC_YEAR_START,
+    sort: "surname-desc" as const,
     searchHash: "0".repeat(64),
   };
   const boundaryToken = codec.encode(boundaryCursor);
@@ -115,6 +117,7 @@ test("rejects an authentic token whose payload is not a cursor", () => {
   const invalidPayloads = [
     { ...cursor, id: "not-a-uuid" },
     { ...cursor, academicYearStart: MAX_ACADEMIC_YEAR_START + 1 },
+    { ...cursor, sort: "firstName-asc" },
     withoutYear,
   ];
 

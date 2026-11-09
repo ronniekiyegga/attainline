@@ -7,17 +7,19 @@ import {
   MAX_CURSOR_LENGTH,
   type StudentCursor,
 } from "../src/features/students/student.cursor.js";
-import { createStudentRouter } from "../src/features/students/student.routes.js";
-import { listen, recordingLogger } from "./support/http.js";
+import { studentRouter } from "./support/student-router.js";
+import { listen, recordingLogger, signedInAs } from "./support/http.js";
 
 const organisationId = "11111111-1111-4111-8111-111111111111";
 const studentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const academicYearStart = 2026;
+const access = { organisationId, yearGroups: null };
 
 const cursorCodec = createStudentCursorCodec(randomBytes(32));
 
-type RouterDependencies = Parameters<typeof createStudentRouter>[0];
+type RouterDependencies = Parameters<typeof studentRouter>[0];
 type StudentQuery = RouterDependencies["queryStudents"];
+type StudentDetailsQuery = RouterDependencies["queryStudent"];
 type AcademicYearQuery = RouterDependencies["queryAcademicYearStarts"];
 
 const student = {
@@ -33,6 +35,7 @@ async function startServer(
   context: TestContext,
   queryStudents: StudentQuery,
   queryAcademicYearStarts: AcademicYearQuery = async () => [academicYearStart],
+  queryStudent: StudentDetailsQuery = async () => null,
 ) {
   const { logger, entries } = recordingLogger();
   const app = express();
@@ -41,11 +44,12 @@ async function startServer(
     response.locals.requestId = "test-request-id";
     next();
   });
+  app.use(signedInAs({ organisationId }));
   app.use(
     "/students",
-    createStudentRouter({
-      organisationId,
+    studentRouter({
       queryStudents,
+      queryStudent,
       queryAcademicYearStarts,
       cursorCodec,
       logger,
@@ -66,6 +70,7 @@ function cursorFor(overrides: Partial<StudentCursor> = {}) {
   return cursorCodec.encode({
     organisationId,
     academicYearStart,
+    sort: "surname-asc",
     surname: "Dunmerrow",
     id: studentId,
     ...overrides,
@@ -78,8 +83,9 @@ test("uses default pagination, configured organisation and selected year", async
   const { url } = await startServer(context, async (options) => {
     calls++;
     assert.deepEqual(options, {
-      organisationId,
+      access,
       academicYearStart,
+      sort: "surname-asc",
       limit: 25,
       after: undefined,
     });
@@ -115,8 +121,8 @@ test("lists the organisation's academic years", async (context) => {
   const { url } = await startServer(
     context,
     async () => ({ items: [], next: null }),
-    async (requestedOrganisationId) => {
-      organisations.push(requestedOrganisationId);
+    async (requestedAccess) => {
+      organisations.push(requestedAccess.organisationId);
       return [2026, 2025];
     },
   );
@@ -149,6 +155,7 @@ test("round-trips an encrypted cursor through the query", async (context) => {
   assert.deepEqual(cursorCodec.decode(first.nextCursor), {
     organisationId,
     academicYearStart,
+    sort: "surname-asc",
     surname: "Dunmerrow",
     id: studentId,
   });
@@ -179,6 +186,7 @@ test("rejects invalid parameters without querying", async (context) => {
   const otherKeyToken = createStudentCursorCodec(randomBytes(32)).encode({
     organisationId,
     academicYearStart,
+    sort: "surname-asc",
     surname: "Dunmerrow",
     id: studentId,
   });
@@ -201,6 +209,11 @@ test("rejects invalid parameters without querying", async (context) => {
     "academicYearStart=0",
     "academicYearStart=9999",
     "academicYearStart=2026&academicYearStart=2025",
+    `${year}&sort=surname`,
+    `${year}&sort=firstName-asc`,
+    `${year}&sort=SURNAME-DESC`,
+    `${year}&sort=`,
+    `${year}&sort=surname-asc&sort=surname-desc`,
     `${year}&limit=0`,
     `${year}&limit=101`,
     `${year}&limit=1.5`,
@@ -278,8 +291,9 @@ test("passes trimmed search to the organisation-scoped query", async (context) =
   const { url } = await startServer(context, async (options) => {
     calls++;
     assert.deepEqual(options, {
-      organisationId,
+      access,
       academicYearStart,
+      sort: "surname-asc",
       limit: 25,
       after: undefined,
       search: "Dunmerrow",
@@ -296,8 +310,9 @@ test("passes trimmed search to the organisation-scoped query", async (context) =
 test("treats a blank search as no search", async (context) => {
   const { url } = await startServer(context, async (options) => {
     assert.deepEqual(options, {
-      organisationId,
+      access,
       academicYearStart,
+      sort: "surname-asc",
       limit: 25,
       after: undefined,
     });
@@ -307,7 +322,7 @@ test("treats a blank search as no search", async (context) => {
   assert.equal((await fetch(`${url}?${directoryQuery({ q: "  " })}`)).status, 200);
 });
 
-test("binds continuation cursors to their search and academic year", async (context) => {
+test("binds continuation cursors to their search, academic year and sort", async (context) => {
   const requests: { search?: string; academicYearStart: number }[] = [];
 
   const { url } = await startServer(context, async ({ search, academicYearStart }) => {
@@ -332,6 +347,8 @@ test("binds continuation cursors to their search and academic year", async (cont
     directoryQuery({ q: "Dunmerrow", cursor: nextCursor, academicYearStart: "2025" }),
     directoryQuery({ q: "Dunmerrow", cursor: cursorFor() }),
     directoryQuery({ cursor: cursorFor({ academicYearStart: 2025 }) }),
+    directoryQuery({ q: "Dunmerrow", cursor: nextCursor, sort: "surname-desc" }),
+    directoryQuery({ cursor: cursorFor({ sort: "surname-desc" }) }),
   ];
 
   for (const query of mismatched) {
@@ -363,4 +380,106 @@ test("rejects invalid search parameters before querying", async (context) => {
   }
 
   assert.equal(calls, 0);
+});
+
+test("passes the allowlisted sort through and binds it to the next cursor", async (context) => {
+  const sorts: string[] = [];
+
+  const { url } = await startServer(context, async ({ sort }) => {
+    sorts.push(sort);
+    return { items: [student], next: { surname: "Dunmerrow", id: studentId } };
+  });
+
+  const first = await (await fetch(
+    `${url}?${directoryQuery({ sort: "surname-desc", limit: "1" })}`,
+  )).json();
+
+  assert.equal(cursorCodec.decode(first.nextCursor)?.sort, "surname-desc");
+
+  const second = await fetch(
+    `${url}?${directoryQuery({ sort: "surname-desc", cursor: first.nextCursor })}`,
+  );
+  assert.equal(second.status, 200);
+
+  const switched = await fetch(`${url}?${directoryQuery({ cursor: first.nextCursor })}`);
+  assert.equal(switched.status, 400);
+
+  assert.deepEqual(sorts, ["surname-desc", "surname-desc"]);
+});
+
+test("returns one student's placement for the requested year", async (context) => {
+  const queries: unknown[] = [];
+
+  const { url } = await startServer(
+    context,
+    async () => ({ items: [], next: null }),
+    undefined,
+    async (options) => {
+      queries.push(options);
+      return student;
+    },
+  );
+
+  const response = await fetch(`${url}/${studentId}?academicYearStart=2026`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), student);
+  assert.deepEqual(queries, [{ access, academicYearStart, studentId }]);
+});
+
+test("reports a student outside the organisation or year as not found", async (context) => {
+  const { url } = await startServer(context, async () => ({ items: [], next: null }));
+
+  const response = await fetch(`${url}/${studentId}?academicYearStart=2026`);
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Student not found" });
+});
+
+test("rejects invalid student detail requests without querying", async (context) => {
+  let calls = 0;
+
+  const { url } = await startServer(
+    context,
+    async () => ({ items: [], next: null }),
+    undefined,
+    async () => {
+      calls++;
+      return student;
+    },
+  );
+
+  const invalidRequests = [
+    `not-a-uuid?academicYearStart=2026`,
+    `${studentId}`,
+    `${studentId}?academicYearStart=abc`,
+    `${studentId}?academicYearStart=2026&academicYearStart=2025`,
+    `${studentId}?academicYearStart=2026&organisationId=${organisationId}`,
+  ];
+
+  for (const path of invalidRequests) {
+    const response = await fetch(`${url}/${path}`);
+
+    assert.equal(response.status, 400, path);
+    assert.deepEqual(await response.json(), { error: "Invalid student request" });
+  }
+
+  assert.equal(calls, 0);
+});
+
+test("returns 503 when student details cannot be loaded", async (context) => {
+  const { url, entries } = await startServer(
+    context,
+    async () => ({ items: [], next: null }),
+    undefined,
+    async () => {
+      throw Object.assign(new Error("Private failure"), { name: "PrismaClientKnownRequestError", code: "P1001" });
+    },
+  );
+
+  const response = await fetch(`${url}/${studentId}?academicYearStart=2026`);
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(entries.map((entry) => entry.event), ["students.details_failed"]);
 });

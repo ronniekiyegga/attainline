@@ -1,21 +1,19 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
-import { connection } from "next/server";
-import { z } from "zod";
+import { redirect } from "next/navigation";
+import { readSessionToken } from "@/features/auth/session";
+import { requestApi } from "@/server/attainline-api";
 import {
   academicYearsSchema,
+  studentAssessmentsSchema,
+  studentDetailsSchema,
   studentPageSchema,
+  type StudentAssessments,
+  type StudentDetails,
   type StudentPage,
 } from "./student-page.schema";
+import type { StudentSort } from "./student-sort";
 
 const PAGE_SIZE = "25";
-
-const REQUEST_TIMEOUT_MS = 25_000;
-
-type ApiResult<T> =
-  | { status: "success"; data: T }
-  | { status: "rejected" }
-  | { status: "unavailable" };
 
 export type AcademicYearsResult =
   | { status: "success"; data: number[] }
@@ -26,112 +24,16 @@ export type StudentPageResult =
   | { status: "invalid-cursor" }
   | { status: "unavailable" };
 
-type FailureReason =
-  | "not-configured"
-  | "timeout"
-  | "network"
-  | "http-status"
-  | "invalid-response";
-
-const fetchErrorSchema = z.object({
-  name: z.string(),
-  cause: z.object({ code: z.string() }).optional(),
-});
-
-function logFailure(fields: {
-  requestId: string;
-  reason: FailureReason;
-  status?: number;
-  errorCode?: string;
-}) {
-  console.error(JSON.stringify({
-    level: "error",
-    event: "student_api.request_failed",
-    ...fields,
-  }));
-}
-
-function describeFetchError(error: unknown) {
-  const parsed = fetchErrorSchema.safeParse(error);
-
-  return {
-    reason: parsed.data?.name === "TimeoutError" ? "timeout" : "network",
-    errorCode: parsed.data?.cause?.code,
-  } as const;
-}
-
-async function requestStudentApi<T>(
-  path: string,
-  parameters: Record<string, string | undefined>,
-  schema: z.ZodType<T>,
-  { expectRejection }: { expectRejection: boolean },
-): Promise<ApiResult<T>> {
-  await connection();
-
-  const apiUrl = process.env.ATTAINLINE_API_URL;
-  const requestId = randomUUID();
-
-  if (!apiUrl || !URL.canParse(apiUrl)) {
-    logFailure({ requestId, reason: "not-configured" });
-    return { status: "unavailable" };
-  }
-
-  const baseUrl = new URL(apiUrl);
-
-  if (!baseUrl.pathname.endsWith("/")) {
-    baseUrl.pathname += "/";
-  }
-
-  baseUrl.search = "";
-  baseUrl.hash = "";
-
-  const url = new URL(path, baseUrl);
-
-  for (const [name, value] of Object.entries(parameters)) {
-    if (value) {
-      url.searchParams.set(name, value);
-    }
-  }
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      cache: "no-store",
-      headers: { "X-Request-Id": requestId },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (error) {
-    logFailure({ requestId, ...describeFetchError(error) });
-    return { status: "unavailable" };
-  }
-
-  if (response.status === 400 && expectRejection) {
-    return { status: "rejected" };
-  }
-
-  if (!response.ok) {
-    logFailure({ requestId, reason: "http-status", status: response.status });
-    return { status: "unavailable" };
-  }
-
-  const body = schema.safeParse(await response.json().catch(() => undefined));
-
-  if (!body.success) {
-    logFailure({ requestId, reason: "invalid-response" });
-    return { status: "unavailable" };
-  }
-
-  return { status: "success", data: body.data };
-}
-
 export async function getAcademicYears(): Promise<AcademicYearsResult> {
-  const result = await requestStudentApi(
-    "students/academic-years",
-    {},
-    academicYearsSchema,
-    { expectRejection: false },
-  );
+  const result = await requestApi({
+    path: "students/academic-years",
+    sessionToken: await readSessionToken(),
+    schema: academicYearsSchema,
+  });
+
+  if (result.status === "unauthenticated") {
+    redirect("/sign-in");
+  }
 
   return result.status === "success"
     ? { status: "success", data: result.data.academicYearStarts }
@@ -140,26 +42,85 @@ export async function getAcademicYears(): Promise<AcademicYearsResult> {
 
 type StudentPageQuery = {
   academicYearStart: number;
+  sort: StudentSort;
   cursor?: string;
   search?: string;
 };
 
 export async function getStudents({
   academicYearStart,
+  sort,
   cursor,
   search,
 }: StudentPageQuery): Promise<StudentPageResult> {
-  const result = await requestStudentApi(
-    "students",
-    {
+  const result = await requestApi({
+    path: "students",
+    query: {
       academicYearStart: String(academicYearStart),
+      sort,
       limit: PAGE_SIZE,
       q: search,
       cursor,
     },
-    studentPageSchema,
-    { expectRejection: Boolean(cursor) },
-  );
+    sessionToken: await readSessionToken(),
+    schema: studentPageSchema,
+    expectedStatuses: cursor ? [400] : [],
+  });
 
-  return result.status === "rejected" ? { status: "invalid-cursor" } : result;
+  if (result.status === "unauthenticated") {
+    redirect("/sign-in");
+  }
+
+  if (result.status === "rejected") {
+    return { status: "invalid-cursor" };
+  }
+
+  return result.status === "success" ? result : { status: "unavailable" };
+}
+
+export type StudentProfileResult =
+  | {
+      status: "success";
+      details: StudentDetails;
+      assessments: StudentAssessments | null;
+    }
+  | { status: "not-found" }
+  | { status: "unavailable" };
+
+export async function getStudentProfile(
+  studentId: string,
+  academicYearStart: number,
+): Promise<StudentProfileResult> {
+  const sessionToken = await readSessionToken();
+  const query = { academicYearStart: String(academicYearStart) };
+  const path = `students/${encodeURIComponent(studentId)}`;
+
+  const [details, assessments] = await Promise.all([
+    requestApi({ path, query, sessionToken, schema: studentDetailsSchema, expectedStatuses: [404] }),
+    requestApi({
+      path: `${path}/assessments`,
+      query,
+      sessionToken,
+      schema: studentAssessmentsSchema,
+      expectedStatuses: [404],
+    }),
+  ]);
+
+  if (details.status === "unauthenticated" || assessments.status === "unauthenticated") {
+    redirect("/sign-in");
+  }
+
+  if (details.status === "rejected") {
+    return { status: "not-found" };
+  }
+
+  if (details.status === "unavailable" || details.data.id !== studentId) {
+    return { status: "unavailable" };
+  }
+
+  return {
+    status: "success",
+    details: details.data,
+    assessments: assessments.status === "success" ? assessments.data : null,
+  };
 }

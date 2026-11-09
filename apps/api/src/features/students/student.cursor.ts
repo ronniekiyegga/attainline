@@ -11,9 +11,10 @@ import {
   MIN_ACADEMIC_YEAR_START,
   surnameLength,
 } from "./student.limits.js";
+import { STUDENT_SORTS } from "./student.sort.js";
 
 const ALGORITHM = "aes-256-gcm";
-const TOKEN_VERSION = 1;
+const TOKEN_VERSION = 2;
 const KEY_BYTES = 32;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
@@ -29,6 +30,7 @@ const MAX_PAYLOAD_BYTES =
       surname: "",
       id: NIL_UUID,
       academicYearStart: MAX_ACADEMIC_YEAR_START,
+      sort: "surname-desc",
       searchHash: "0".repeat(SEARCH_HASH_LENGTH),
     }),
   ) + MAX_SURNAME_LENGTH * MAX_JSON_BYTES_PER_CODE_POINT;
@@ -46,6 +48,7 @@ const cursorPayloadSchema = z.strictObject({
   academicYearStart: z.number().int()
     .min(MIN_ACADEMIC_YEAR_START)
     .max(MAX_ACADEMIC_YEAR_START),
+  sort: z.enum(STUDENT_SORTS),
   searchHash: z.string().length(SEARCH_HASH_LENGTH).optional(),
 });
 

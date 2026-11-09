@@ -1,20 +1,24 @@
 import { Search } from "lucide-react";
+import type { ReactNode } from "react";
 import { toolbarControlClass } from "./directory-link";
 import { MAX_SEARCH_LENGTH } from "./student-search.schema";
+import { DEFAULT_STUDENT_SORT, type StudentSort } from "./student-sort";
 
 type StudentSearchProps = {
   search: string;
   year: number;
+  sort: StudentSort;
+  children?: ReactNode;
 };
 
-export function StudentSearch({ search, year }: StudentSearchProps) {
+export function StudentSearch({ search, year, sort, children }: StudentSearchProps) {
   return (
     <form
       action="/"
       method="get"
       role="search"
       aria-label="Student directory"
-      className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto"
+      className="flex w-full flex-wrap items-center justify-between gap-2 md:w-auto"
     >
       <input type="hidden" name="year" value={year} />
       <div className="relative flex w-full md:w-auto md:min-w-0">
@@ -34,13 +38,18 @@ export function StudentSearch({ search, year }: StudentSearchProps) {
           maxLength={MAX_SEARCH_LENGTH}
           placeholder="Search"
           autoComplete="off"
-          className="h-9 w-full rounded-md border border-gray-200 bg-background pl-9 pr-3 text-sm outline-offset-4 md:w-48"
+          className="h-9 w-full rounded-md border border-gray-200 bg-background py-2 pl-9 pr-3 text-sm outline-offset-4 md:w-48"
         />
       </div>
-
-      <button type="submit" className={toolbarControlClass}>
-        Search
-      </button>
+      {sort !== DEFAULT_STUDENT_SORT && (
+        <input type="hidden" name="sort" value={sort} />
+      )}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none sm:justify-start">
+        <button type="submit" className={toolbarControlClass}>
+          Search
+        </button>
+        {children}
+      </div>
     </form>
   );
 }

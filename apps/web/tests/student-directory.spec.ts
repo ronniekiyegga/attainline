@@ -33,17 +33,18 @@ test.describe("student directory", () => {
     await expect(page.getByText("Showing 2 students · 2026/27")).toBeVisible();
     await expect(directoryRows(page)).toHaveText(["Avery Ashgrove", "Brackenridge"]);
     await expect(page.getByRole("columnheader")).toHaveText([
-      "Student",
+      /^Student, sorted by surname A to Z/,
       "Student reference",
       "Year group",
       "Class",
+      "Details",
     ]);
     await expect(
       page.getByRole("row", { name: /Avery Ashgrove/ }).getByRole("cell"),
-    ).toHaveText(["DEMO-SYN-001", "Year 7", "7A"]);
+    ).toHaveText(["DEMO-SYN-001", "Year 7", "7A", "View"]);
     await expect(
       page.getByRole("row", { name: /Brackenridge/ }).getByRole("cell"),
-    ).toHaveText(["DEMO-SYN-002", "Year 7", "Not recorded"]);
+    ).toHaveText(["DEMO-SYN-002", "Year 7", "Not recorded", "View"]);
     await expect(page.getByRole("link", { name: "First page" })).toHaveCount(0);
 
     const requests = await receivedRequests(request);
@@ -62,6 +63,17 @@ test.describe("student directory", () => {
     for (const received of requests) {
       expect(z.uuid().safeParse(received.requestId).success).toBe(true);
     }
+  });
+
+  test("requests a linked year's students without waiting for the year list", async ({
+    page,
+    request,
+  }) => {
+    await useScenario(request, "populated", { holdYearsForList: true });
+    await page.goto("/?year=2025");
+
+    await expect(directoryRows(page)).toHaveText(["Dorian Elmscott"]);
+    await expect(yearTab(page, "2025/26")).toHaveAttribute("aria-current", "page");
   });
 
   test("pages forward client-side, survives refresh and returns to the start", async ({
@@ -214,7 +226,7 @@ test.describe("student directory", () => {
     await expect(
       page.getByRole("heading", { name: "This academic year isn’t available" }),
     ).toBeVisible();
-    expect(await studentListRequests(request)).toEqual([]);
+    await expect(page.getByRole("table")).toHaveCount(0);
 
     await page.getByRole("link", { name: "Back to latest year" }).click();
     await expect(page).toHaveURL("/?q=Velmira");

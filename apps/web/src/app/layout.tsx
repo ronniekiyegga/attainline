@@ -30,8 +30,8 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Student directory | Attainline",
-  description: "Browse the Attainline synthetic student directory.",
+  title: "Attainline",
+  description: "Explore synthetic school assessment analytics in Attainline.",
   referrer: "no-referrer",
 };
 

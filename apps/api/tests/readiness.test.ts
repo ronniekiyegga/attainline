@@ -9,7 +9,15 @@ async function startApp(
   checkDatabase: () => Promise<void>,
 ) {
   const { logger, entries } = recordingLogger();
-  const app = createApp({ checkDatabase, logger, studentRouter: Router() });
+  const app = createApp({
+    checkDatabase,
+    logger,
+    authRouter: Router(),
+    analyticsRouter: Router(),
+    studentRouter: Router(),
+    assessmentRouter: Router(),
+    requireSession: (_request, _response, next) => next(),
+  });
 
   return { baseUrl: await listen(context, app), entries };
 }

@@ -9,8 +9,6 @@ requireLocalTestDatabase();
 
 const { database } = await import("../src/database.js");
 
-// Fixtures are created here, not taken from demo seed data, so these
-// checks run against any migrated attainline_test database.
 const organisationA = randomUUID();
 const organisationB = randomUUID();
 const studentA = randomUUID();
@@ -107,7 +105,14 @@ test("restricts deleting an organisation that has students", async () => {
     where: { id: organisationA },
   }));
 
-  assert.equal(failure.sqlState, "23001");
+  assert.ok(
+    (failure.errorCode === "P2003"
+      && failure.adapterKind === "ForeignKeyConstraintViolation"
+      && failure.sqlState === "23503")
+    || (failure.errorCode === undefined
+      && failure.adapterKind === "postgres"
+      && failure.sqlState === "23001"),
+  );
 });
 
 test("accepts surnames up to the length limit and rejects longer ones", async () => {
