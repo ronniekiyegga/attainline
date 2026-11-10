@@ -16,6 +16,8 @@ async function startApp(
     analyticsRouter: Router(),
     studentRouter: Router(),
     assessmentRouter: Router(),
+    calendarRouter: Router(),
+    notificationRouter: Router(),
     requireSession: (_request, _response, next) => next(),
   });
 

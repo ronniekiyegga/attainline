@@ -104,8 +104,8 @@ test("renders the original teacher dashboard composition for a teacher membershi
   await expect(cards.first().getByRole("button", { name: "Cohort signal 1: 33.3% on track" })).toHaveCSS("background-image", /linear-gradient/);
 
   await expect(page.getByRole("region", { name: "PERFORMANCE OVERVIEW" })).toBeVisible();
-  await expect(page.getByText("Year 7 assessment review")).toBeVisible();
-  await expect(page.getByText("Demo schedule")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Synthetic Year 7 assessment review" })).toBeVisible();
+  await expect(page.getByText("Scheduled")).toBeVisible();
   const rank = page.getByRole("region", { name: "RANK" });
   await expect(rank).toBeVisible();
   await expect(rank.getByRole("button", { name: "Show selected student score" })).toHaveAttribute("aria-pressed", "true");
@@ -121,6 +121,48 @@ test("renders the original teacher dashboard composition for a teacher membershi
   const updates = page.getByRole("region", { name: "Performance Signal Alerts" });
   await expect(updates).toBeVisible();
   await expect(updates.getByText("Assessment coverage is 66.7%")).toBeVisible();
+  await expect(updates.getByRole("button", { name: "Pinned" })).toHaveCount(0);
+  await updates.getByRole("button", { name: "Events" }).click();
+  await expect(updates.getByText("Calendar events appear in Performance Overview")).toBeVisible();
+});
+
+test("creates a scoped calendar event and persists notification read state", async ({ page, request }) => {
+  await useScenario(request, "teacher-dashboard");
+  await page.goto("/dashboard");
+
+  await page.getByRole("button", { name: "Add event" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create calendar event" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Title").fill("Synthetic reading review");
+  await dialog.getByLabel("Notes").fill("Invented browser-test calendar event");
+  await dialog.getByRole("button", { name: "Save event" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Synthetic reading review")).toBeVisible();
+
+  const updates = page.getByRole("region", { name: "Performance Signal Alerts" });
+  const markRead = updates.getByRole("button", { name: "MARK READ" }).first();
+  await markRead.click();
+  await expect(updates.getByRole("button", { name: "MARK READ" })).toHaveCount(2);
+  await page.reload();
+  await expect(updates.getByRole("button", { name: "MARK READ" })).toHaveCount(2);
+});
+
+test("opens the command panel by keyboard and navigates only to implemented pages", async ({ page, request }) => {
+  await useScenario(request, "populated");
+  await page.goto("/");
+  await expect(page.locator("header").getByRole("button", { name: "Search... ⌘ K" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+k");
+
+  const dialog = page.getByRole("dialog", { name: "Navigate Attainline" });
+  await expect(dialog).toBeVisible();
+  const search = dialog.getByRole("combobox");
+  await expect(search).toBeFocused();
+  await search.fill("rankings");
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL("/rankings");
+  await expect(dialog).toBeHidden();
 });
 
 test("shows a bounded error state when analytics requests fail", async ({ page, request }) => {

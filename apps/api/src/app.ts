@@ -14,6 +14,8 @@ type AppDependencies = {
   analyticsRouter: Router;
   studentRouter: Router;
   assessmentRouter: Router;
+  calendarRouter: Router;
+  notificationRouter: Router;
   requireSession: RequestHandler;
   logger: Logger;
 };
@@ -24,6 +26,8 @@ export function createApp({
   analyticsRouter,
   studentRouter,
   assessmentRouter,
+  calendarRouter,
+  notificationRouter,
   requireSession,
   logger,
 }: AppDependencies) {
@@ -54,6 +58,8 @@ export function createApp({
 
   app.use("/auth", authRouter);
   app.use("/analytics", requireSession, analyticsRouter);
+  app.use("/calendar", requireSession, calendarRouter);
+  app.use("/notifications", requireSession, notificationRouter);
   app.use("/students/:studentId/assessments", requireSession, assessmentRouter);
   app.use("/students", requireSession, studentRouter);
 

@@ -11,8 +11,8 @@
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "typecheck": "prisma generate && tsc --noEmit",
-    "test": "tsx --test tests/analytics.test.ts tests/analytics.routes.test.ts tests/assessments.test.ts tests/auth-credentials.test.ts tests/demo-data.test.ts tests/readiness.test.ts tests/database-errors.test.ts tests/student-cursor.test.ts tests/students.routes.test.ts",
-    "test:integration": "prisma generate && tsx --test --test-concurrency=1 tests/analytics.integration.test.ts tests/assessments.integration.test.ts tests/auth.integration.test.ts tests/student-constraints.integration.test.ts tests/students.integration.test.ts",
+    "test": "tsx --test tests/analytics.test.ts tests/analytics.routes.test.ts tests/assessments.test.ts tests/auth-credentials.test.ts tests/calendar.test.ts tests/demo-data.test.ts tests/notifications.test.ts tests/readiness.test.ts tests/database-errors.test.ts tests/student-cursor.test.ts tests/students.routes.test.ts",
+    "test:integration": "prisma generate && tsx --test --test-concurrency=1 tests/analytics.integration.test.ts tests/assessments.integration.test.ts tests/auth.integration.test.ts tests/calendar.integration.test.ts tests/student-constraints.integration.test.ts tests/students.integration.test.ts",
     "seed:demo": "prisma generate && tsx scripts/seed-demo.ts"
   },
   "dependencies": {

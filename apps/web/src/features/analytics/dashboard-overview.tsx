@@ -4,8 +4,10 @@ import { RankingPreview } from "./ranking-preview";
 import { TeacherPerformanceOverview } from "./teacher-performance-overview";
 import { TeacherUpdatesPanel } from "./teacher-updates-panel";
 import { teacherWidgetSeries } from "./teacher-widget-series";
+import type { CalendarEvent } from "@/features/calendar/calendar.schema";
+import type { Notification } from "@/features/notifications/notification.schema";
 
-export function DashboardOverview({ overview }: { overview: AnalyticsOverview }) {
+export function DashboardOverview({ overview, calendarEvents, visibleYearGroups, notifications }: { overview: AnalyticsOverview; calendarEvents: CalendarEvent[]; visibleYearGroups: number[] | null; notifications: Notification[] }) {
   const average = overview.averageStandardAgeScore;
   const trendSeries = teacherWidgetSeries("trend", overview.onTrackPercentage, 55, "Cohort signal", `${overview.onTrackPercentage}% on track`);
   const baselineSeries = teacherWidgetSeries("baseline", average ?? 0, 100, "Baseline signal", average === null ? "No baseline" : `${average} SAS`);
@@ -79,7 +81,7 @@ export function DashboardOverview({ overview }: { overview: AnalyticsOverview })
 
       <div className="mb-8 grid grid-flow-row-dense grid-cols-1 place-items-center gap-2 p-2 lg:grid-cols-2 lg:place-items-stretch xl:grid-cols-4">
         <div className="overlayCard relative flex h-full w-full min-w-0 max-w-[780px] flex-col overflow-hidden bg-white lg:col-span-2 lg:max-w-none xl:col-span-2 xl:row-span-2">
-          <TeacherPerformanceOverview overview={overview} />
+          <TeacherPerformanceOverview overview={overview} initialEvents={calendarEvents} visibleYearGroups={visibleYearGroups} />
         </div>
         <div className="overlayCard relative flex h-full w-full min-w-0 max-w-[360px] flex-col items-center justify-center overflow-hidden rounded-[0.5rem] bg-[linear-gradient(253deg,#fff_59.04%,rgba(248,253,255,0.28)_97.02%)] lg:max-w-none">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:14px_14px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,#000_40%,transparent_90%)]" />
@@ -87,7 +89,7 @@ export function DashboardOverview({ overview }: { overview: AnalyticsOverview })
         </div>
         <div className="overlayCard relative flex h-full w-full min-w-0 max-w-[360px] flex-col items-center justify-center overflow-hidden rounded-[0.5rem] bg-[linear-gradient(253deg,#fff_59.04%,rgba(248,253,255,0.28)_97.02%)] lg:max-w-none">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:14px_14px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,#000_40%,transparent_90%)]" />
-          <TeacherUpdatesPanel overview={overview} />
+          <TeacherUpdatesPanel notifications={notifications} />
         </div>
       </div>
     </div>

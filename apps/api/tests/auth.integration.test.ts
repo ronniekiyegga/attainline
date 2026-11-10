@@ -65,6 +65,8 @@ async function startApi(context: TestContext) {
       logger,
     }),
     assessmentRouter: Router(),
+    calendarRouter: Router(),
+    notificationRouter: Router(),
   });
 
   return listen(context, app);

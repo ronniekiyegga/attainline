@@ -155,6 +155,50 @@ try {
         + `${staff.memberships.length} ${staff.memberships.length === 1 ? "membership" : "memberships"}`,
     );
   }
+
+  for (const [organisationIndex, organisation] of demoOrganisations.entries()) {
+    const creator = await database.organisationMembership.findFirstOrThrow({
+      where: { organisationId: organisation.id, role: "HEADTEACHER" },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+    const suffix = organisationIndex === 0 ? "1" : "2";
+    const events = organisationIndex === 0
+      ? [
+          {
+            id: `33333333-3333-4333-8333-33333333333${suffix}`,
+            organisationId: organisation.id,
+            createdByMembershipId: creator.id,
+            title: "Year 7 assessment review",
+            description: "Review the latest synthetic baseline and reading evidence.",
+            startsAt: new Date("2026-10-12T14:30:00.000Z"),
+            endsAt: new Date("2026-10-12T15:15:00.000Z"),
+            yearGroup: 7,
+          },
+          {
+            id: "44444444-4444-4444-8444-444444444441",
+            organisationId: organisation.id,
+            createdByMembershipId: creator.id,
+            title: "Year 8 progress discussion",
+            description: "Discuss the invented cohort's current assessment coverage.",
+            startsAt: new Date("2026-10-21T09:00:00.000Z"),
+            endsAt: new Date("2026-10-21T09:45:00.000Z"),
+            yearGroup: 8,
+          },
+        ]
+      : [{
+          id: `33333333-3333-4333-8333-33333333333${suffix}`,
+          organisationId: organisation.id,
+          createdByMembershipId: creator.id,
+          title: "Whole-school assessment review",
+          description: "Review the fictional demonstration cohort.",
+          startsAt: new Date("2026-10-15T10:00:00.000Z"),
+          endsAt: new Date("2026-10-15T10:45:00.000Z"),
+        }];
+
+    const addedEvents = await database.calendarEvent.createMany({ data: events, skipDuplicates: true });
+    console.info(`${organisation.id}: added ${addedEvents.count} of ${events.length} demo calendar events`);
+  }
 } finally {
   await database.$disconnect();
 }

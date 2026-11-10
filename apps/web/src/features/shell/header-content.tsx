@@ -1,10 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { Suspense } from "react";
-import { Bell, ChevronRight, CloudUpload, Search } from "lucide-react";
+import { Bell, ChevronRight } from "lucide-react";
 import { navigationItems } from "./navigation-items";
 import { SidebarTrigger } from "./sidebar/sidebar";
+import { CommandPanel } from "./command-panel";
 
 function Breadcrumb() {
   const pathname = usePathname();
@@ -38,18 +40,13 @@ export function HeaderContent() {
         </Suspense>
       </div>
       <div className="hidden items-center gap-3 pr-3 text-gray-500 md:flex">
-        <div className="flex h-8 w-44 items-center gap-2 rounded-md border border-gray-100 bg-white px-2 text-xs text-gray-400 shadow-sm" aria-label="Search is unavailable in the public demonstration">
-          <Search aria-hidden className="size-4" />
-          <span>Search...</span>
-          <span className="ml-auto text-[10px]">⌘ K</span>
-        </div>
+        <Suspense fallback={<div aria-hidden className="h-8 w-44 rounded-md border border-gray-100 bg-white shadow-sm" />}>
+          <CommandPanel />
+        </Suspense>
         <span className="h-5 w-px bg-gray-100" aria-hidden />
-        <span title="Notifications are unavailable in the public demonstration" className="relative flex size-7 items-center justify-center">
+        <Link href="/dashboard#notifications" aria-label="Open notifications" className="relative flex size-7 items-center justify-center rounded-full hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#600bea]">
           <Bell aria-hidden className="size-4" />
-        </span>
-        <span title="Uploads are unavailable in the public demonstration" className="flex size-7 items-center justify-center">
-          <CloudUpload aria-hidden className="size-4" />
-        </span>
+        </Link>
       </div>
     </header>
   );

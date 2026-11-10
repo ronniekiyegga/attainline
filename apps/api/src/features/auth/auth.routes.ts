@@ -1,23 +1,10 @@
-import express, { Router, type ErrorRequestHandler, type RequestHandler } from "express";
-import { z } from "zod";
+import express, { Router, type RequestHandler } from "express";
+import { rejectUnreadableBody } from "../../request-body.js";
 import type { AuthController } from "./auth.controller.js";
 
 type AuthRouterDependencies = {
   controller: AuthController;
   requireSession: RequestHandler;
-};
-
-const clientErrorSchema = z.object({ status: z.number().int().min(400).max(499) });
-
-const rejectUnreadableBody: ErrorRequestHandler = (error, _request, response, next) => {
-  const clientError = clientErrorSchema.safeParse(error);
-
-  if (!clientError.success) {
-    next(error);
-    return;
-  }
-
-  response.status(clientError.data.status).json({ error: "Invalid request body" });
 };
 
 export function createAuthRouter({ controller, requireSession }: AuthRouterDependencies) {
