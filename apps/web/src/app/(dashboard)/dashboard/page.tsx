@@ -11,6 +11,8 @@ import { dashboardRoleLabel } from "@/features/analytics/dashboard-role";
 import { LeadershipOverview } from "@/features/analytics/leadership-overview";
 import { TeacherDashboardActions } from "@/features/analytics/teacher-dashboard-actions";
 import { formatAcademicYear } from "@/features/students/academic-year";
+import { getCalendarEvents } from "@/features/calendar/calendar.api";
+import { getNotifications } from "@/features/notifications/notification.api";
 
 export default function DashboardPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   return (
@@ -35,7 +37,13 @@ async function DashboardContent({ searchParams }: { searchParams: DashboardSearc
   }
   if (session.status !== "signed-in") return null;
 
-  const overview = await getAnalyticsOverview(resolved.year);
+  const calendarFrom = new Date(Date.UTC(resolved.year, 9, 1));
+  const calendarTo = new Date(Date.UTC(resolved.year, 10, 1));
+  const [overview, calendarEvents, notifications] = await Promise.all([
+    getAnalyticsOverview(resolved.year),
+    getCalendarEvents(calendarFrom, calendarTo),
+    getNotifications(resolved.year),
+  ]);
 
   return (
     <InstitutionalDashboardShell
@@ -62,7 +70,7 @@ async function DashboardContent({ searchParams }: { searchParams: DashboardSearc
           ? <NoAnalyticsCohort />
           : session.session.role === "HEADTEACHER"
             ? <LeadershipOverview overview={overview.data} />
-            : <DashboardOverview overview={overview.data} />
+            : <DashboardOverview overview={overview.data} calendarEvents={calendarEvents} visibleYearGroups={session.session.yearGroups} notifications={notifications} />
         : <AnalyticsUnavailable />}
     </InstitutionalDashboardShell>
   );

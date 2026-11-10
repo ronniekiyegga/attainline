@@ -28,6 +28,14 @@ import { createStudentController } from "./features/students/student.controller.
 import { createStudentRouter } from "./features/students/student.routes.js";
 import { createStudentService } from "./features/students/student.service.js";
 import { logger } from "./logger.js";
+import { createCalendarController } from "./features/calendar/calendar.controller.js";
+import * as calendarRepository from "./features/calendar/calendar.repository.js";
+import { createCalendarRouter } from "./features/calendar/calendar.routes.js";
+import { createCalendarService } from "./features/calendar/calendar.service.js";
+import { createNotificationController } from "./features/notifications/notification.controller.js";
+import * as notificationRepository from "./features/notifications/notification.repository.js";
+import { createNotificationRouter } from "./features/notifications/notification.routes.js";
+import { createNotificationService } from "./features/notifications/notification.service.js";
 
 const cursorCodec = createStudentCursorCodec(
   parseStudentCursorKey(process.env.STUDENT_CURSOR_KEY),
@@ -50,6 +58,17 @@ const studentDirectory = createStudentService({ queryStudents: listStudents, cur
 
 const assessmentService = createAssessmentService({ findStudent, listResultsUpToYear });
 const analyticsService = createAnalyticsService({ listCohortAssessmentRows });
+const calendarService = createCalendarService({
+  listEvents: calendarRepository.listCalendarEvents,
+  createEvent: calendarRepository.createCalendarEvent,
+  findEvent: calendarRepository.findCalendarEvent,
+  deleteEvent: calendarRepository.deleteCalendarEvent,
+});
+const notificationService = createNotificationService({
+  overview: analyticsService.overview,
+  listReads: notificationRepository.listReadKeys,
+  markRead: notificationRepository.markNotificationRead,
+});
 
 const app = createApp({
   checkDatabase,
@@ -73,6 +92,12 @@ const app = createApp({
   ),
   assessmentRouter: createAssessmentRouter(
     createAssessmentController({ service: assessmentService, logger }),
+  ),
+  calendarRouter: createCalendarRouter(
+    createCalendarController({ service: calendarService, logger }),
+  ),
+  notificationRouter: createNotificationRouter(
+    createNotificationController({ service: notificationService, logger }),
   ),
 });
 

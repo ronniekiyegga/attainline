@@ -58,6 +58,16 @@ let authRequests: {
 }[] = [];
 let issuedTokens = 0;
 const revokedTokens = new Set<string>();
+const readNotifications = new Set<string>();
+let calendarEvents = [{
+  id: "7e3a1f71-1111-4111-8111-000000000001",
+  title: "Synthetic Year 7 assessment review",
+  description: "Invented calendar fixture",
+  startsAt: "2026-10-12T14:30:00.000Z",
+  endsAt: "2026-10-12T15:15:00.000Z",
+  yearGroup: 7,
+  createdByMembershipId: "7e3a1f71-2222-4222-8222-000000000001",
+}];
 
 const academicYearStarts = [2026, 2025];
 
@@ -306,6 +316,42 @@ function studentResponse(response: ServerResponse, url: URL, studentId: string, 
   }
 }
 
+function notificationsResponse(response: ServerResponse, url: URL) {
+  const year = Number(url.searchParams.get("academicYearStart") ?? 2026);
+  const items = [
+    { key: `assessment:${year}:priority:1`, title: "1 high-priority indicator flagged", scope: "VISIBLE COHORT", content: "2 assessed students are included in the shared assessment-priority calculation.", href: `/analytics?year=${year}` },
+    { key: `assessment:${year}:coverage:66.7`, title: "Assessment coverage is 66.7%", scope: `${year}/${String(year + 1).slice(-2)}`, content: "2 of 3 visible students have qualifying assessment evidence.", href: `/analytics?year=${year}` },
+    { key: `assessment:${year}:off-track:0`, title: "0 students currently off track", scope: "SHARED INDICATOR", content: "Status values use the authoritative assessment indicator rules and the active role scope.", href: `/rankings?year=${year}` },
+  ].map((item) => ({ ...item, read: readNotifications.has(item.key) }));
+  sendJson(response, 200, { items });
+}
+
+async function mutationResponse(request: IncomingMessage, response: ServerResponse, first: string, second?: string) {
+  if (!sessionOrganisation(request)) {
+    sendJson(response, 401, { error: "Authentication required" });
+    return;
+  }
+  if (first === "notifications" && request.method === "PUT") {
+    const body = await readBody(request) as { notificationKey?: string } | undefined;
+    if (body?.notificationKey) readNotifications.add(body.notificationKey);
+    response.writeHead(204).end();
+    return;
+  }
+  if (first === "calendar" && request.method === "POST") {
+    const body = await readBody(request) as Record<string, unknown>;
+    const created = { ...body, id: "7e3a1f71-3333-4333-8333-000000000001", description: body.description || null, yearGroup: body.yearGroup || null, createdByMembershipId: "7e3a1f71-2222-4222-8222-000000000001" };
+    calendarEvents.push(created as typeof calendarEvents[number]);
+    sendJson(response, 201, created);
+    return;
+  }
+  if (first === "calendar" && request.method === "DELETE" && second) {
+    calendarEvents = calendarEvents.filter(({ id }) => id !== second);
+    response.writeHead(204).end();
+    return;
+  }
+  sendJson(response, 404, { error: "Not found" });
+}
+
 function readBody(request: IncomingMessage): Promise<unknown> {
   return new Promise((resolve) => {
     let body = "";
@@ -423,6 +469,8 @@ createServer((request, response) => {
     received = [];
     authRequests = [];
     revokedTokens.clear();
+    readNotifications.clear();
+    calendarEvents = calendarEvents.slice(0, 1);
     response.writeHead(204).end();
   } else if (request.method === "GET" && first === "__requests") {
     sendJson(response, 200, received);
@@ -434,6 +482,16 @@ createServer((request, response) => {
     sendJson(response, 401, { error: "Authentication required" });
   } else if (request.method === "GET" && first === "analytics") {
     analyticsResponse(response, url, sessionOrganisation(request)!);
+  } else if (request.method === "GET" && first === "calendar" && !sessionOrganisation(request)) {
+    sendJson(response, 401, { error: "Authentication required" });
+  } else if (request.method === "GET" && first === "calendar") {
+    sendJson(response, 200, { items: calendarEvents });
+  } else if (request.method === "GET" && first === "notifications" && !sessionOrganisation(request)) {
+    sendJson(response, 401, { error: "Authentication required" });
+  } else if (request.method === "GET" && first === "notifications") {
+    notificationsResponse(response, url);
+  } else if (["calendar", "notifications"].includes(first) && ["POST", "PUT", "DELETE"].includes(request.method ?? "")) {
+    void mutationResponse(request, response, first, second);
   } else if (request.method === "GET" && first === "students" && !sessionOrganisation(request)) {
     sendJson(response, 401, { error: "Authentication required" });
   } else if (request.method === "GET" && first === "students") {
