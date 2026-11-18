@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">Attainline student data and analytics flow</title>
+  <desc id="desc">Students, enrolments and assessment results are restricted in Prisma queries, evaluated by shared indicators, and then supplied to profiles, dashboards and rankings.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#172033" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c83a0"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #dfe3ee; stroke-width: 2; filter: url(#shadow); }
+      .source { fill: #f1efff; stroke: #d8d2ff; stroke-width: 2; filter: url(#shadow); }
+      .accent { fill: #6842f5; }
+      .title { fill: #15192a; font: 600 23px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-anchor: middle; }
+      .detail { fill: #687087; font: 400 16px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-anchor: middle; }
+      .label { fill: #687087; font: 500 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-anchor: middle; }
+      .flow { fill: none; stroke: #7c83a0; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="900" rx="32" fill="#f8f9fc"/>
+
+  <g>
+    <path class="flow" d="M305 155 V205 H600 V235"/>
+    <path class="flow" d="M895 155 V205 H600 V235"/>
+    <text class="label" x="600" y="197">read within verified access scope</text>
+    <path class="flow" d="M600 355 V425"/>
+    <text class="label" x="600" y="397">latest sitting per measure</text>
+    <path class="flow" d="M600 545 V595 H315 V640"/>
+    <path class="flow" d="M600 545 V595 H885 V640"/>
+    <text class="label" x="445" y="586">consistent status + priority</text>
+    <text class="label" x="770" y="586">cohort aggregation + ordering</text>
+    <path class="flow" d="M885 750 V790 H720 V820"/>
+    <path class="flow" d="M885 750 V790 H1050 V820"/>
+  </g>
+
+  <g transform="translate(105 55)">
+    <path class="source" d="M0 25 C0 8 90 0 200 0 S400 8 400 25 V75 C400 92 310 100 200 100 S0 92 0 75 Z"/>
+    <ellipse cx="200" cy="25" rx="200" ry="25" fill="#ebe7ff" stroke="#d8d2ff" stroke-width="2"/>
+    <text class="title" x="200" y="60">Students and enrolments</text>
+  </g>
+  <g transform="translate(695 55)">
+    <path class="source" d="M0 25 C0 8 90 0 200 0 S400 8 400 25 V75 C400 92 310 100 200 100 S0 92 0 75 Z"/>
+    <ellipse cx="200" cy="25" rx="200" ry="25" fill="#ebe7ff" stroke="#d8d2ff" stroke-width="2"/>
+    <text class="title" x="200" y="60">Assessment results</text>
+  </g>
+  <g transform="translate(350 235)">
+    <rect class="card" width="500" height="120" rx="24"/>
+    <rect class="accent" width="8" height="70" x="0" y="25" rx="4"/>
+    <text class="title" x="250" y="58">Scoped Prisma queries</text>
+    <text class="detail" x="250" y="88">Organisation · academic year · assigned year groups</text>
+  </g>
+  <g transform="translate(350 425)">
+    <rect class="card" width="500" height="120" rx="24"/>
+    <rect class="accent" width="8" height="70" x="0" y="25" rx="4"/>
+    <text class="title" x="250" y="58">Shared assessment indicators</text>
+    <text class="detail" x="250" y="88">One status, priority and measure interpretation</text>
+  </g>
+  <g transform="translate(95 640)">
+    <rect class="card" width="440" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="220" y="54">Student profiles</text>
+    <text class="detail" x="220" y="81">Identity · placement · assessment history</text>
+  </g>
+  <g transform="translate(665 640)">
+    <rect class="card" width="440" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="220" y="54">Analytics service</text>
+    <text class="detail" x="220" y="81">Visible cohort · deterministic global rank</text>
+  </g>
+  <g transform="translate(580 820)">
+    <rect class="card" width="280" height="70" rx="22"/>
+    <text class="title" x="140" y="44">Dashboards</text>
+  </g>
+  <g transform="translate(910 820)">
+    <rect class="card" width="280" height="70" rx="22"/>
+    <text class="title" x="140" y="44">Rankings</text>
+  </g>
+</svg>

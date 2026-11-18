@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="980" viewBox="0 0 1200 980" role="img" aria-labelledby="title desc">
+  <title id="title">Attainline request and authorisation flow</title>
+  <desc id="desc">Browser requests pass through Next.js and Express, where sessions, memberships, organisations and year groups are verified before scoped Prisma queries reach PostgreSQL.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#172033" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c83a0"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #dfe3ee; stroke-width: 2; filter: url(#shadow); }
+      .accent { fill: #6842f5; }
+      .title { fill: #15192a; font: 600 25px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-anchor: middle; }
+      .detail { fill: #687087; font: 400 17px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-anchor: middle; }
+      .label { fill: #687087; font: 500 16px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-anchor: start; }
+      .flow { fill: none; stroke: #7c83a0; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="980" rx="32" fill="#f8f9fc"/>
+
+  <g>
+    <path class="flow" d="M600 155 V214"/>
+    <text class="label" x="628" y="190">HTML + Server Actions</text>
+    <path class="flow" d="M600 325 V384"/>
+    <text class="label" x="628" y="360">Bearer token · no-store</text>
+    <path class="flow" d="M600 495 V554"/>
+    <text class="label" x="628" y="530">verify session + membership</text>
+    <path class="flow" d="M600 665 V724"/>
+    <text class="label" x="628" y="700">organisation + year-group scope</text>
+    <path class="flow" d="M600 835 V884"/>
+    <text class="label" x="628" y="870">scoped Prisma query</text>
+  </g>
+
+  <g transform="translate(400 45)">
+    <rect class="card" width="400" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="200" y="55">Browser</text>
+    <text class="detail" x="200" y="82">Untrusted client</text>
+  </g>
+  <g transform="translate(350 215)">
+    <rect class="card" width="500" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="250" y="55">Next.js App Router</text>
+    <text class="detail" x="250" y="82">Server Components · Server Actions · HttpOnly cookie</text>
+  </g>
+  <g transform="translate(400 385)">
+    <rect class="card" width="400" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="200" y="55">Express API</text>
+    <text class="detail" x="200" y="82">Routes · controllers · validation</text>
+  </g>
+  <g transform="translate(350 555)">
+    <rect class="card" width="500" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="250" y="55">Session and membership guard</text>
+    <text class="detail" x="250" y="82">Active school · role · assigned year groups</text>
+  </g>
+  <g transform="translate(380 725)">
+    <rect class="card" width="440" height="110" rx="24"/>
+    <rect class="accent" width="8" height="62" x="0" y="24" rx="4"/>
+    <text class="title" x="220" y="55">Feature services</text>
+    <text class="detail" x="220" y="82">Use cases · calculations · repositories</text>
+  </g>
+  <g transform="translate(440 885)">
+    <path class="card" d="M0 24 C0 8 72 0 160 0 S320 8 320 24 V62 C320 78 248 86 160 86 S0 78 0 62 Z"/>
+    <ellipse cx="160" cy="24" rx="160" ry="24" fill="#f1efff" stroke="#dfe3ee" stroke-width="2"/>
+    <text class="title" x="160" y="55">PostgreSQL</text>
+  </g>
+</svg>
