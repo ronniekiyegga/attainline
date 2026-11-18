@@ -9,3 +9,4 @@ coverage/
 .DS_Store
 .neon
 /apps/api/src/generated/prisma/
+.vscode/

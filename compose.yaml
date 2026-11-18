@@ -9,6 +9,7 @@ services:
       - "127.0.0.1:4101:4100"
     environment:
       DATABASE_URL: postgresql://attainline:local-development-only@database:5432/attainline
+      STUDENT_CURSOR_KEY: ${STUDENT_CURSOR_KEY:-}
     init: true
     healthcheck:
       test:

@@ -13,7 +13,10 @@ model Organisation {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  students Student[]
+  students          Student[]
+  memberships       OrganisationMembership[]
+  calendarEvents    CalendarEvent[]
+  notificationReads NotificationRead[]
 
   @@map("organisations")
 }
@@ -23,13 +26,14 @@ model Student {
   organisationId        String   @map("organisation_id") @db.Uuid
   institutionStudentRef String   @map("institution_student_ref")
   firstName             String?  @map("first_name")
-  surname               String
+  surname               String   @db.VarChar(100)
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
-  enrolments StudentEnrolment[]
+  enrolments        StudentEnrolment[]
+  assessmentResults AssessmentResult[]
 
   @@unique([organisationId, institutionStudentRef])
   @@unique([organisationId, id])
@@ -52,4 +56,159 @@ model StudentEnrolment {
   @@unique([organisationId, studentId, academicYearStart])
   @@index([organisationId, academicYearStart, yearGroup])
   @@map("student_enrolments")
+}
+
+enum MembershipRole {
+  HEADTEACHER
+  HEAD_OF_YEAR
+  TEACHER
+
+  @@map("membership_role")
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("membership_status")
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  displayName  String   @map("display_name")
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships OrganisationMembership[]
+
+  @@map("users")
+}
+
+model OrganisationMembership {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organisationId String           @map("organisation_id") @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  role           MembershipRole
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  yearGroups        MembershipYearGroup[]
+  sessions          Session[]
+  calendarEvents    CalendarEvent[]
+  notificationReads NotificationRead[]
+
+  @@unique([userId, organisationId])
+  @@unique([userId, id])
+  @@index([organisationId])
+  @@map("organisation_memberships")
+}
+
+model MembershipYearGroup {
+  membershipId String @map("membership_id") @db.Uuid
+  yearGroup    Int    @map("year_group")
+
+  membership OrganisationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@id([membershipId, yearGroup])
+  @@map("membership_year_groups")
+}
+
+model Session {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tokenHash    Bytes     @unique @map("token_hash")
+  userId       String    @map("user_id") @db.Uuid
+  membershipId String    @map("membership_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  membership OrganisationMembership @relation(fields: [userId, membershipId], references: [userId, id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@index([userId])
+  @@index([membershipId])
+  @@map("sessions")
+}
+
+model LoginThrottle {
+  email           String    @id
+  failures        Int
+  windowStartedAt DateTime  @map("window_started_at") @db.Timestamptz(3)
+  lockedUntil     DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  @@map("login_throttles")
+}
+
+enum AssessmentMeasure {
+  CAT4_VERBAL
+  CAT4_QUANTITATIVE
+  CAT4_NON_VERBAL
+  CAT4_SPATIAL
+  CAT4_MEAN
+  NGRT_READING
+  PTE
+  PTM
+  PTS
+
+  @@map("assessment_measure")
+}
+
+model AssessmentResult {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organisationId         String            @map("organisation_id") @db.Uuid
+  studentId              String            @map("student_id") @db.Uuid
+  measure                AssessmentMeasure
+  academicYearStart      Int               @map("academic_year_start")
+  satOn                  DateTime          @map("sat_on") @db.Date
+  rawScore               Int?              @map("raw_score")
+  rawScoreMaximum        Int?              @map("raw_score_maximum")
+  standardAgeScore       Int               @map("standard_age_score")
+  stanine                Int
+  nationalPercentileRank Int?              @map("national_percentile_rank")
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student Student @relation(fields: [organisationId, studentId], references: [organisationId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([studentId, measure, satOn])
+  @@index([organisationId, studentId, measure, satOn])
+  @@map("assessment_results")
+}
+
+model CalendarEvent {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organisationId        String   @map("organisation_id") @db.Uuid
+  createdByMembershipId String   @map("created_by_membership_id") @db.Uuid
+  title                 String   @db.VarChar(120)
+  description           String?  @db.VarChar(500)
+  startsAt              DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt                DateTime @map("ends_at") @db.Timestamptz(3)
+  yearGroup             Int?     @map("year_group")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organisation Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy    OrganisationMembership @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([organisationId, startsAt, id])
+  @@index([createdByMembershipId])
+  @@map("calendar_events")
+}
+
+model NotificationRead {
+  organisationId  String   @map("organisation_id") @db.Uuid
+  membershipId    String   @map("membership_id") @db.Uuid
+  notificationKey String   @map("notification_key") @db.VarChar(160)
+  readAt          DateTime @default(now()) @map("read_at") @db.Timestamptz(3)
+
+  organisation Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  membership   OrganisationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@id([membershipId, notificationKey])
+  @@index([organisationId, membershipId])
+  @@map("notification_reads")
 }
